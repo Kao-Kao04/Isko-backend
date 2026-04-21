@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://api.github.com/repos/Kao-Kao04/Isko/contents?ref=dev\")"
+    ]
+  }
+}
