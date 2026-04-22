@@ -3,13 +3,36 @@ from sqlalchemy import select
 from jose import JWTError
 
 from app.models.user import User, UserRole, StudentProfile
-from app.schemas.auth import RegisterRequest, LoginRequest
-from app.utils.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
-from app.exceptions import ConflictError, UnauthorizedError
+from app.schemas.auth import InitiateRegisterRequest, RegisterRequest, LoginRequest
+from app.utils.security import (
+    hash_password, verify_password,
+    create_access_token, create_refresh_token, decode_token,
+    create_email_verification_token, decode_registration_token,
+)
+from app.utils.email import send_verification_email
+from app.exceptions import ConflictError, UnauthorizedError, ValidationError
+
+
+async def initiate_register(db: AsyncSession, data: InitiateRegisterRequest) -> None:
+    existing = await db.execute(select(User).where(User.email == data.email))
+    if existing.scalar_one_or_none():
+        raise ConflictError("Email already registered")
+
+    hashed = hash_password(data.password)
+    token = create_email_verification_token(data.email, hashed)
+    send_verification_email(data.email, token)
 
 
 async def register_student(db: AsyncSession, data: RegisterRequest) -> User:
-    existing = await db.execute(select(User).where(User.email == data.email))
+    try:
+        payload = decode_registration_token(data.token)
+    except (JWTError, ValueError):
+        raise ValidationError("Invalid or expired registration token")
+
+    email = payload["email"]
+    hashed_password = payload["hashed_password"]
+
+    existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
         raise ConflictError("Email already registered")
 
@@ -20,9 +43,10 @@ async def register_student(db: AsyncSession, data: RegisterRequest) -> User:
         raise ConflictError("Student number already registered")
 
     user = User(
-        email=data.email,
-        hashed_password=hash_password(data.password),
+        email=email,
+        hashed_password=hashed_password,
         role=UserRole.student,
+        is_verified=True,
     )
     db.add(user)
     await db.flush()
@@ -48,6 +72,12 @@ async def login(db: AsyncSession, data: LoginRequest) -> dict:
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.hashed_password):
         raise UnauthorizedError("Invalid credentials")
+    if not user.is_verified:
+        raise UnauthorizedError("Please verify your email before logging in")
+    if user.account_status == "pending":
+        raise UnauthorizedError("Your account is pending OSFA approval")
+    if user.account_status == "rejected":
+        raise UnauthorizedError("Your account registration was rejected")
 
     payload = {"sub": str(user.id), "role": user.role}
     return {

@@ -10,6 +10,12 @@ class UserRole(str, enum.Enum):
     osfa_staff = "osfa_staff"
 
 
+class AccountStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -18,6 +24,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(SAEnum(UserRole), nullable=False, default=UserRole.student)
     is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    account_status = Column(SAEnum(AccountStatus), nullable=False, default=AccountStatus.pending)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

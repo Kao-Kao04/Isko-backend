@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from datetime import datetime
-from app.models.user import UserRole
+from app.models.user import UserRole, AccountStatus
 
 
 class StudentProfileResponse(BaseModel):
@@ -22,6 +22,8 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    is_verified: bool
+    account_status: AccountStatus
     created_at: datetime
     student_profile: StudentProfileResponse | None = None
 
