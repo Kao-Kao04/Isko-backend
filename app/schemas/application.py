@@ -53,6 +53,27 @@ class AppealResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ApplicationStudentInfo(BaseModel):
+    id: int
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    student_number: str | None = None
+    college: str | None = None
+    program: str | None = None
+    year_level: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ApplicationScholarshipInfo(BaseModel):
+    id: int
+    name: str
+    scholarship_type: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ApplicationResponse(BaseModel):
     id: int
     student_id: int
@@ -64,5 +85,7 @@ class ApplicationResponse(BaseModel):
     submitted_at: datetime
     updated_at: datetime
     appeal: AppealResponse | None = None
+    student: ApplicationStudentInfo | None = None
+    scholarship: ApplicationScholarshipInfo | None = None
 
     model_config = {"from_attributes": True}

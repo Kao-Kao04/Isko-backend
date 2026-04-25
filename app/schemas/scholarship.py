@@ -28,6 +28,12 @@ class ScholarshipCreate(BaseModel):
     eligible_programs: List[str] | None = None
     eligible_year_levels: List[int] | None = None
     min_gwa: str | None = None
+    amount_raw: int | None = None
+    period: str | None = None
+    scholarship_type: str | None = None
+    eligibility_text: str | None = None
+    cover_image_url: str | None = None
+    category: str | None = None
     requirements: List[RequirementCreate] = []
 
 
@@ -40,6 +46,12 @@ class ScholarshipUpdate(BaseModel):
     eligible_programs: List[str] | None = None
     eligible_year_levels: List[int] | None = None
     min_gwa: str | None = None
+    amount_raw: int | None = None
+    period: str | None = None
+    scholarship_type: str | None = None
+    eligibility_text: str | None = None
+    cover_image_url: str | None = None
+    category: str | None = None
 
 
 class ScholarshipStatusUpdate(BaseModel):
@@ -57,6 +69,13 @@ class ScholarshipResponse(BaseModel):
     eligible_programs: List[str] | None
     eligible_year_levels: List[int] | None
     min_gwa: str | None
+    amount_raw: int | None
+    period: str | None
+    scholarship_type: str | None
+    eligibility_text: str | None
+    cover_image_url: str | None
+    category: str | None
+    applicants_count: int = 0
     requirements: List[RequirementResponse] = []
     created_at: datetime
 

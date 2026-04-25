@@ -36,6 +36,10 @@ async def list_applications(db: AsyncSession, user: User, page: int, page_size: 
     q = select(Application)
     if user.role == UserRole.student:
         q = q.where(Application.student_id == user.id)
+    if user.role == UserRole.osfa_staff and user.department:
+        q = (q
+            .join(Scholarship, Application.scholarship_id == Scholarship.id)
+            .where(Scholarship.category == user.department.value))
 
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()

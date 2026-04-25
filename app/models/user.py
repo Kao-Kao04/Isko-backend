@@ -8,12 +8,18 @@ from app.database import Base
 class UserRole(str, enum.Enum):
     student = "student"
     osfa_staff = "osfa_staff"
+    super_admin = "super_admin"
 
 
 class AccountStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+
+
+class DepartmentEnum(str, enum.Enum):
+    public = "public"
+    private = "private"
 
 
 class User(Base):
@@ -26,6 +32,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     account_status = Column(SAEnum(AccountStatus), nullable=False, default=AccountStatus.pending)
+    department = Column(SAEnum(DepartmentEnum, name="departmentenum", create_constraint=True), nullable=True, default=None)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

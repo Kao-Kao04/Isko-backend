@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from app.config import settings
-from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports
+from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin
 
 app = FastAPI(title="IskoMo API", version="1.0.0")
 
@@ -47,6 +47,7 @@ app.include_router(documents.router)
 app.include_router(notifications.router)
 app.include_router(scholars.router)
 app.include_router(reports.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

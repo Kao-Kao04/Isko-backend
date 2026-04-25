@@ -16,7 +16,9 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/initiate-register", status_code=200)
 async def initiate_register(data: InitiateRegisterRequest, db: AsyncSession = Depends(get_db)):
-    await auth_service.initiate_register(db, data)
+    result = await auth_service.initiate_register(db, data)
+    if result.get("dev"):
+        return {"message": "Dev mode: skipping email", "token": result["token"]}
     return {"message": "Verification email sent. Please check your inbox."}
 
 
@@ -26,7 +28,6 @@ async def verify_email(token: str):
         payload = decode_email_verification_token(token)
     except (JWTError, ValueError):
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
-
     reg_token = create_registration_token(payload["email"], payload["hashed_password"])
     return RedirectResponse(url=f"{settings.FRONTEND_URL}/register?token={reg_token}")
 
@@ -41,7 +42,7 @@ async def login(data: LoginRequest, response: Response, db: AsyncSession = Depen
     tokens = await auth_service.login(db, data)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24 * 7,
     )
     return TokenResponse(access_token=tokens["access_token"])
 
@@ -54,7 +55,7 @@ async def refresh(response: Response, refresh_token: str | None = Cookie(default
     tokens = auth_service.refresh_tokens(refresh_token)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24 * 7,
     )
     return TokenResponse(access_token=tokens["access_token"])
 

@@ -12,6 +12,11 @@ class ScholarshipStatus(str, enum.Enum):
     archived = "archived"
 
 
+class CategoryEnum(str, enum.Enum):
+    public = "public"
+    private = "private"
+
+
 class Scholarship(Base):
     __tablename__ = "scholarships"
 
@@ -25,6 +30,12 @@ class Scholarship(Base):
     eligible_programs = Column(JSON)
     eligible_year_levels = Column(JSON)
     min_gwa = Column(String)
+    amount_raw = Column(Integer)
+    period = Column(String)
+    scholarship_type = Column(String)
+    eligibility_text = Column(Text)
+    cover_image_url = Column(String)
+    category = Column(SAEnum(CategoryEnum, name="categoryenum", create_constraint=True), nullable=True, default=CategoryEnum.public)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

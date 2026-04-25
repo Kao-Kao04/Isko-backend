@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from jose import JWTError
 
 from app.models.user import User, UserRole, StudentProfile
@@ -11,16 +12,24 @@ from app.utils.security import (
 )
 from app.utils.email import send_verification_email
 from app.exceptions import ConflictError, UnauthorizedError, ValidationError
+from app.config import settings
 
 
-async def initiate_register(db: AsyncSession, data: InitiateRegisterRequest) -> None:
+async def initiate_register(db: AsyncSession, data: InitiateRegisterRequest) -> dict:
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise ConflictError("Email already registered")
 
     hashed = hash_password(data.password)
     token = create_email_verification_token(data.email, hashed)
+
+    if settings.ENVIRONMENT == "development":
+        from app.utils.security import create_registration_token
+        reg_token = create_registration_token(data.email, hashed)
+        return {"dev": True, "token": reg_token}
+
     send_verification_email(data.email, token)
+    return {"dev": False}
 
 
 async def register_student(db: AsyncSession, data: RegisterRequest) -> User:
@@ -63,8 +72,11 @@ async def register_student(db: AsyncSession, data: RegisterRequest) -> User:
     )
     db.add(profile)
     await db.commit()
-    await db.refresh(user)
-    return user
+
+    result = await db.execute(
+        select(User).options(selectinload(User.student_profile)).where(User.id == user.id)
+    )
+    return result.scalar_one()
 
 
 async def login(db: AsyncSession, data: LoginRequest) -> dict:

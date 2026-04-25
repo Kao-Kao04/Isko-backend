@@ -12,6 +12,8 @@ async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: 
     q = select(Scholarship)
     if user.role == "student":
         q = q.where(Scholarship.status == ScholarshipStatus.active)
+    if user.role == "osfa_staff" and user.department:
+        q = q.where(Scholarship.category == user.department.value)
 
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()
@@ -29,7 +31,12 @@ async def get_scholarship(db: AsyncSession, scholarship_id: int) -> Scholarship:
     return scholarship
 
 
-async def create_scholarship(db: AsyncSession, data: ScholarshipCreate, created_by: int) -> Scholarship:
+async def create_scholarship(db: AsyncSession, data: ScholarshipCreate, user: User) -> Scholarship:
+    if user.role == "osfa_staff" and user.department:
+        data.category = user.department.value
+    if not data.category:
+        data.category = "public"
+
     scholarship = Scholarship(
         name=data.name,
         description=data.description,
@@ -39,7 +46,8 @@ async def create_scholarship(db: AsyncSession, data: ScholarshipCreate, created_
         eligible_programs=data.eligible_programs,
         eligible_year_levels=data.eligible_year_levels,
         min_gwa=data.min_gwa,
-        created_by=created_by,
+        category=data.category,
+        created_by=user.id,
     )
     db.add(scholarship)
     await db.flush()
@@ -92,6 +100,7 @@ async def duplicate_scholarship(db: AsyncSession, scholarship_id: int, created_b
         eligible_programs=original.eligible_programs,
         eligible_year_levels=original.eligible_year_levels,
         min_gwa=original.min_gwa,
+        category=original.category,
         status=ScholarshipStatus.draft,
         created_by=created_by,
     )
