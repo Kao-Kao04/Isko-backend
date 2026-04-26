@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.models.application import Application, ApplicationStatus, EvalStatus
 from app.models.scholarship import Scholarship, ScholarshipStatus
@@ -15,8 +16,18 @@ from app.utils.audit import append_audit
 from app.exceptions import NotFoundError, ForbiddenError, ValidationError, ConflictError
 
 
+def _with_relations(q):
+    return q.options(
+        selectinload(Application.appeal),
+        selectinload(Application.scholarship),
+        selectinload(Application.student),
+    )
+
+
 async def _get_application(db: AsyncSession, application_id: int) -> Application:
-    result = await db.execute(select(Application).where(Application.id == application_id))
+    result = await db.execute(
+        _with_relations(select(Application).where(Application.id == application_id))
+    )
     app = result.scalar_one_or_none()
     if not app:
         raise NotFoundError("Application", application_id)
@@ -43,7 +54,7 @@ async def list_applications(db: AsyncSession, user: User, page: int, page_size: 
 
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()
-    q = q.offset((page - 1) * page_size).limit(page_size)
+    q = _with_relations(q).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(q)
     return result.scalars().all(), total
 

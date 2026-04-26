@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Response, Cookie
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import JWTError
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -9,7 +10,14 @@ from app.schemas.auth import InitiateRegisterRequest, RegisterRequest, LoginRequ
 from app.schemas.user import UserResponse
 from app.services import auth_service
 from app.utils.security import decode_email_verification_token, create_registration_token
+from app.utils.security import verify_password, hash_password
+from app.exceptions import ValidationError
 from app.config import settings
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -69,3 +77,18 @@ async def logout(response: Response):
 @router.get("/me", response_model=UserResponse)
 async def me(current_user=Depends(get_current_user)):
     return current_user
+
+
+@router.post("/change-password", status_code=200)
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise ValidationError("Current password is incorrect")
+    if len(data.new_password) < 8:
+        raise ValidationError("New password must be at least 8 characters")
+    current_user.hashed_password = hash_password(data.new_password)
+    await db.commit()
+    return {"message": "Password updated successfully"}

@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from typing import List
 
 from app.models.scholarship import Scholarship, ScholarshipRequirement, ScholarshipStatus
@@ -8,23 +9,29 @@ from app.schemas.scholarship import ScholarshipCreate, ScholarshipUpdate, Schola
 from app.exceptions import NotFoundError, ValidationError
 
 
-async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: int):
-    q = select(Scholarship)
-    if user.role == "student":
-        q = q.where(Scholarship.status == ScholarshipStatus.active)
-    if user.role == "osfa_staff" and user.department:
-        q = q.where(Scholarship.category == user.department.value)
+def _with_requirements(q):
+    return q.options(selectinload(Scholarship.requirements))
 
-    count_result = await db.execute(select(func.count()).select_from(q.subquery()))
+
+async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: int):
+    base = select(Scholarship)
+    if user.role == "student":
+        base = base.where(Scholarship.status == ScholarshipStatus.active)
+    if user.role == "osfa_staff" and user.department:
+        base = base.where(Scholarship.category == user.department.value)
+
+    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar()
 
-    q = q.offset((page - 1) * page_size).limit(page_size)
+    q = _with_requirements(base).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(q)
     return result.scalars().all(), total
 
 
 async def get_scholarship(db: AsyncSession, scholarship_id: int) -> Scholarship:
-    result = await db.execute(select(Scholarship).where(Scholarship.id == scholarship_id))
+    result = await db.execute(
+        _with_requirements(select(Scholarship).where(Scholarship.id == scholarship_id))
+    )
     scholarship = result.scalar_one_or_none()
     if not scholarship:
         raise NotFoundError("Scholarship", scholarship_id)
@@ -62,8 +69,7 @@ async def create_scholarship(db: AsyncSession, data: ScholarshipCreate, user: Us
         db.add(r)
 
     await db.commit()
-    await db.refresh(scholarship)
-    return scholarship
+    return await get_scholarship(db, scholarship.id)
 
 
 async def update_scholarship(db: AsyncSession, scholarship_id: int, data: ScholarshipUpdate) -> Scholarship:
@@ -71,16 +77,14 @@ async def update_scholarship(db: AsyncSession, scholarship_id: int, data: Schola
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(scholarship, field, value)
     await db.commit()
-    await db.refresh(scholarship)
-    return scholarship
+    return await get_scholarship(db, scholarship_id)
 
 
 async def update_status(db: AsyncSession, scholarship_id: int, data: ScholarshipStatusUpdate) -> Scholarship:
     scholarship = await get_scholarship(db, scholarship_id)
     scholarship.status = data.status
     await db.commit()
-    await db.refresh(scholarship)
-    return scholarship
+    return await get_scholarship(db, scholarship_id)
 
 
 async def delete_scholarship(db: AsyncSession, scholarship_id: int) -> None:
@@ -107,10 +111,7 @@ async def duplicate_scholarship(db: AsyncSession, scholarship_id: int, created_b
     db.add(clone)
     await db.flush()
 
-    reqs = await db.execute(
-        select(ScholarshipRequirement).where(ScholarshipRequirement.scholarship_id == scholarship_id)
-    )
-    for req in reqs.scalars().all():
+    for req in original.requirements:
         db.add(ScholarshipRequirement(
             scholarship_id=clone.id,
             name=req.name,
@@ -119,5 +120,4 @@ async def duplicate_scholarship(db: AsyncSession, scholarship_id: int, created_b
         ))
 
     await db.commit()
-    await db.refresh(clone)
-    return clone
+    return await get_scholarship(db, clone.id)

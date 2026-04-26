@@ -6,6 +6,11 @@ from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, Semes
 from app.exceptions import NotFoundError
 
 
+async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Scholar]:
+    result = await db.execute(select(Scholar).where(Scholar.student_id == student_id))
+    return list(result.scalars().all())
+
+
 async def list_scholars(db: AsyncSession, page: int, page_size: int):
     q = select(Scholar)
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))

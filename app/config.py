@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "onboarding@resend.dev"
     FRONTEND_URL: str = "http://localhost:3000"
 
+    GMAIL_USER: str = ""
+    GMAIL_APP_PASSWORD: str = ""
+
+    MAILERSEND_API_KEY: str = ""
+    MAILERSEND_FROM: str = ""
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v: str) -> str:

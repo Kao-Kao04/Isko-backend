@@ -1,13 +1,23 @@
-import resend
+import logging
+import requests
+
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+MAILERSEND_API_URL = "https://api.mailersend.com/v1/email"
 
 
 def send_verification_email(to_email: str, token: str) -> None:
-    resend.api_key = settings.RESEND_API_KEY
     verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-    resend.Emails.send({
-        "from": settings.EMAIL_FROM,
-        "to": to_email,
+
+    if not settings.MAILERSEND_API_KEY or not settings.MAILERSEND_FROM:
+        logger.info("DEV — verification link for %s: %s", to_email, verification_url)
+        return
+
+    payload = {
+        "from": {"email": settings.MAILERSEND_FROM, "name": "IskoMo"},
+        "to": [{"email": to_email}],
         "subject": "Verify your IskoMo email",
         "html": f"""
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
@@ -22,5 +32,15 @@ def send_verification_email(to_email: str, token: str) -> None:
                 This link expires in 24 hours. If you did not request this, ignore this email.
             </p>
         </div>
-        """
-    })
+        """,
+    }
+
+    response = requests.post(
+        MAILERSEND_API_URL,
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {settings.MAILERSEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+    )
+    response.raise_for_status()

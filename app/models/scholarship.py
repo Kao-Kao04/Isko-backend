@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, JSON, ForeignKey, Enum as SAEnum, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, Enum as SAEnum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -41,7 +41,7 @@ class Scholarship(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     requirements = relationship("ScholarshipRequirement", back_populates="scholarship", cascade="all, delete-orphan")
-    applications = relationship("Application", back_populates="scholarship")
+    applications = relationship("Application", back_populates="scholarship", cascade="all, delete-orphan")
 
 
 class ScholarshipRequirement(Base):
