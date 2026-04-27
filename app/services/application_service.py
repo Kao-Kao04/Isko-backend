@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
-from app.models.application import Application, ApplicationStatus, EvalStatus
+from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import Scholarship, ScholarshipStatus
 from app.models.scholar import Scholar
 from app.models.appeal import Appeal, AppealStatus
@@ -17,10 +17,13 @@ from app.exceptions import NotFoundError, ForbiddenError, ValidationError, Confl
 
 
 def _with_relations(q):
+    from app.models.user import User
+    from app.models.scholar import Scholar
     return q.options(
         selectinload(Application.appeal),
         selectinload(Application.scholarship),
-        selectinload(Application.student),
+        selectinload(Application.student).selectinload(User.student_profile),
+        selectinload(Application.scholar),
     )
 
 
@@ -182,7 +185,7 @@ async def update_application_status(
 
 
 async def update_eval_status(
-    db: AsyncSession, application_id: int, data: EvalStatusUpdate, staff: User
+    db: AsyncSession, application_id: int, data: EvalStatusUpdate, _: User
 ) -> Application:
     app = await _get_application(db, application_id)
     app.eval_status = data.eval_status
@@ -225,8 +228,8 @@ async def review_appeal(
 
     if data.approved:
         app = await _get_application(db, application_id)
-        app.status = ApplicationStatus.approved
-        await append_audit(db, application_id, staff.id, "appeal_approved", from_status=ApplicationStatus.rejected, to_status=ApplicationStatus.approved, note=data.review_note)
+        app.status = ApplicationStatus.pending
+        await append_audit(db, application_id, staff.id, "appeal_approved", from_status=ApplicationStatus.rejected, to_status=ApplicationStatus.pending, note=data.review_note)
 
     await db.commit()
     await db.refresh(appeal)
@@ -235,7 +238,7 @@ async def review_appeal(
 
 async def get_audit_trail(db: AsyncSession, application_id: int, user: User):
     from app.models.audit import AuditEntry
-    app = await get_application(db, application_id, user)
+    await get_application(db, application_id, user)  # permission check
     result = await db.execute(
         select(AuditEntry).where(AuditEntry.application_id == application_id).order_by(AuditEntry.created_at)
     )

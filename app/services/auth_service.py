@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from jose import JWTError
 
-from app.models.user import User, UserRole, StudentProfile
+from app.models.user import User, UserRole, AccountStatus, StudentProfile
 from app.schemas.auth import InitiateRegisterRequest, RegisterRequest, LoginRequest
 from app.utils.security import (
     hash_password, verify_password,
@@ -56,6 +56,7 @@ async def register_student(db: AsyncSession, data: RegisterRequest) -> User:
         hashed_password=hashed_password,
         role=UserRole.student,
         is_verified=True,
+        account_status=AccountStatus.approved,
     )
     db.add(user)
     await db.flush()

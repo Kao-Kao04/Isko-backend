@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_osfa
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
+
+
+class BroadcastRequest(BaseModel):
+    title: str
+    body: str
 from app.schemas.common import PaginatedResponse
 from app.utils.pagination import paginate
 from app.services import notification_service
@@ -39,6 +45,16 @@ async def mark_all_read(
 ):
     await notification_service.mark_all_read(db, current_user.id)
     return {"message": "All notifications marked as read"}
+
+
+@router.post("/broadcast", status_code=200)
+async def broadcast(
+    data: BroadcastRequest,
+    _: User = Depends(require_osfa),
+    db: AsyncSession = Depends(get_db),
+):
+    count = await notification_service.broadcast_announcement(db, data.title, data.body)
+    return {"message": f"Announcement sent to {count} students."}
 
 
 @router.delete("/{notification_id}", status_code=204)

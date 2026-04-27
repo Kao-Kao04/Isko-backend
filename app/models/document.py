@@ -25,3 +25,4 @@ class ApplicationDocument(Base):
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
 
     application = relationship("Application", back_populates="documents")
+    requirement = relationship("ScholarshipRequirement", foreign_keys=[requirement_id], lazy="joined")

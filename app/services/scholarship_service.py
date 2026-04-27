@@ -1,16 +1,32 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from typing import List
-
 from app.models.scholarship import Scholarship, ScholarshipRequirement, ScholarshipStatus
+from app.models.application import Application, ApplicationStatus
 from app.models.user import User
 from app.schemas.scholarship import ScholarshipCreate, ScholarshipUpdate, ScholarshipStatusUpdate
-from app.exceptions import NotFoundError, ValidationError
+from app.exceptions import NotFoundError
 
 
 def _with_requirements(q):
     return q.options(selectinload(Scholarship.requirements))
+
+
+async def _attach_applicants_counts(db: AsyncSession, scholarships: list) -> None:
+    if not scholarships:
+        return
+    ids = [s.id for s in scholarships]
+    rows = await db.execute(
+        select(Application.scholarship_id, func.count(Application.id))
+        .where(
+            Application.scholarship_id.in_(ids),
+            Application.status.notin_([ApplicationStatus.withdrawn]),
+        )
+        .group_by(Application.scholarship_id)
+    )
+    counts = {row[0]: row[1] for row in rows}
+    for s in scholarships:
+        s.applicants_count = counts.get(s.id, 0)
 
 
 async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: int):
@@ -25,7 +41,9 @@ async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: 
 
     q = _with_requirements(base).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(q)
-    return result.scalars().all(), total
+    scholarships = list(result.scalars().all())
+    await _attach_applicants_counts(db, scholarships)
+    return scholarships, total
 
 
 async def get_scholarship(db: AsyncSession, scholarship_id: int) -> Scholarship:
@@ -35,6 +53,7 @@ async def get_scholarship(db: AsyncSession, scholarship_id: int) -> Scholarship:
     scholarship = result.scalar_one_or_none()
     if not scholarship:
         raise NotFoundError("Scholarship", scholarship_id)
+    await _attach_applicants_counts(db, [scholarship])
     return scholarship
 
 
@@ -74,8 +93,20 @@ async def create_scholarship(db: AsyncSession, data: ScholarshipCreate, user: Us
 
 async def update_scholarship(db: AsyncSession, scholarship_id: int, data: ScholarshipUpdate) -> Scholarship:
     scholarship = await get_scholarship(db, scholarship_id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    requirements_data = update_data.pop('requirements', None)
+    for field, value in update_data.items():
         setattr(scholarship, field, value)
+    if requirements_data is not None:
+        for req in scholarship.requirements:
+            await db.delete(req)
+        for req in requirements_data:
+            db.add(ScholarshipRequirement(
+                scholarship_id=scholarship_id,
+                name=req['name'],
+                description=req.get('description'),
+                is_required=req.get('is_required', True),
+            ))
     await db.commit()
     return await get_scholarship(db, scholarship_id)
 

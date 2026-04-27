@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime
-from typing import List
+from typing import Any, List
 from app.models.application import ApplicationStatus, EvalStatus
 
 
@@ -64,6 +64,23 @@ class ApplicationStudentInfo(BaseModel):
     year_level: int | None = None
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode='before')
+    @classmethod
+    def extract_profile(cls, data: Any) -> Any:
+        if hasattr(data, 'student_profile') and data.student_profile:
+            p = data.student_profile
+            return {
+                'id':             data.id,
+                'email':          data.email,
+                'first_name':     p.first_name,
+                'last_name':      p.last_name,
+                'student_number': p.student_number,
+                'college':        p.college,
+                'program':        p.program,
+                'year_level':     p.year_level,
+            }
+        return data
 
 
 class ApplicationScholarshipInfo(BaseModel):

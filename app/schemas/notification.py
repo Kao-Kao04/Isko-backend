@@ -1,5 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime
+from typing import Any
+
+
+def _derive_type(title: str) -> str:
+    t = title.lower()
+    if 'approved' in t:    return 'approved'
+    if 'rejected' in t:    return 'rejected'
+    if 'incomplete' in t:  return 'incomplete'
+    if 'resubmit' in t:    return 'resubmit'
+    if 'deadline' in t:    return 'deadline'
+    if 'submitted' in t:   return 'status'
+    return 'info'
 
 
 class NotificationResponse(BaseModel):
@@ -10,4 +22,16 @@ class NotificationResponse(BaseModel):
     application_id: int | None
     created_at: datetime
 
+    # Fields expected by the frontend
+    message: str = ''
+    read: bool = False
+    type: str = 'info'
+
     model_config = {"from_attributes": True}
+
+    @model_validator(mode='after')
+    def populate_frontend_fields(self) -> 'NotificationResponse':
+        self.message = self.body
+        self.read    = self.is_read
+        self.type    = _derive_type(self.title)
+        return self

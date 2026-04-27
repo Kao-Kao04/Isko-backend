@@ -52,6 +52,7 @@ class ScholarshipUpdate(BaseModel):
     eligibility_text: str | None = None
     cover_image_url: str | None = None
     category: str | None = None
+    requirements: List[RequirementCreate] | None = None
 
 
 class ScholarshipStatusUpdate(BaseModel):

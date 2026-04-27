@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
 
 from app.models.notification import Notification
+from app.models.user import User, UserRole
 from app.exceptions import NotFoundError
 
 
@@ -16,6 +17,16 @@ async def create_notification(
     db.add(notif)
     await db.flush()
     return notif
+
+
+async def broadcast_announcement(db: AsyncSession, title: str, body: str) -> int:
+    result = await db.execute(select(User).where(User.role == UserRole.student, User.is_active == True))
+    students = result.scalars().all()
+    for student in students:
+        notif = Notification(user_id=student.id, title=title, body=body)
+        db.add(notif)
+    await db.commit()
+    return len(students)
 
 
 async def list_notifications(db: AsyncSession, user_id: int, page: int, page_size: int):

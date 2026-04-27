@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -14,6 +14,13 @@ router = APIRouter(prefix="/api/applications/{application_id}/documents", tags=[
 def _enrich(doc) -> DocumentResponse:
     resp = DocumentResponse.model_validate(doc)
     resp.url = get_public_url(doc.storage_path)
+    resp.file_url = resp.url
+    if doc.requirement and doc.requirement.name:
+        resp.requirement_name = doc.requirement.name
+    else:
+        resp.requirement_name = doc.filename
+    resp.file_name = doc.filename
+    resp.flagged = doc.status == "flagged"
     return resp
 
 
@@ -21,10 +28,11 @@ def _enrich(doc) -> DocumentResponse:
 async def upload_document(
     application_id: int,
     file: UploadFile = File(...),
+    requirement_name: str | None = Form(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    doc = await document_service.upload_document(db, application_id, file, current_user)
+    doc = await document_service.upload_document(db, application_id, file, current_user, requirement_name)
     return _enrich(doc)
 
 
