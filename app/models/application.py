@@ -28,6 +28,7 @@ class Application(Base):
     status = Column(SAEnum(ApplicationStatus), nullable=False, default=ApplicationStatus.pending)
     eval_status = Column(SAEnum(EvalStatus), nullable=False, default=EvalStatus.not_started)
     rejected_docs = Column(JSON, default=list)
+    eval_score = Column(JSON, nullable=True)
     remarks = Column(Text)
     submitted_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

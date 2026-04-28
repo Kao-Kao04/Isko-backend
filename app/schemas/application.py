@@ -22,6 +22,13 @@ class EvalStatusUpdate(BaseModel):
     eval_status: EvalStatus
 
 
+class EvalScoreUpdate(BaseModel):
+    financial_need: int
+    essay: int
+    interview: int
+    community: int
+
+
 class AppealCreate(BaseModel):
     reason: str
 
@@ -98,6 +105,7 @@ class ApplicationResponse(BaseModel):
     status: ApplicationStatus
     eval_status: EvalStatus
     rejected_docs: List[int] | None
+    eval_score: dict | None = None
     remarks: str | None
     submitted_at: datetime
     updated_at: datetime

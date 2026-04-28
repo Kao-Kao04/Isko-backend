@@ -24,6 +24,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_verified: bool
     account_status: AccountStatus
+    rejection_remarks: str | None = None
     department: str | None = None
     created_at: datetime
     student_profile: StudentProfileResponse | None = None

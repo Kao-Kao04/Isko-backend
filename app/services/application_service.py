@@ -8,7 +8,7 @@ from app.models.scholar import Scholar
 from app.models.appeal import Appeal, AppealStatus
 from app.models.user import User, UserRole
 from app.schemas.application import (
-    ApplicationCreate, ApplicationStatusUpdate, EvalStatusUpdate,
+    ApplicationCreate, ApplicationStatusUpdate, EvalStatusUpdate, EvalScoreUpdate,
     AppealCreate, AppealReview,
 )
 from app.services.notification_service import create_notification
@@ -46,7 +46,7 @@ def _check_eligibility(scholarship: Scholarship, student_profile) -> None:
         raise ValidationError("Not eligible: year level restriction")
 
 
-async def list_applications(db: AsyncSession, user: User, page: int, page_size: int):
+async def list_applications(db: AsyncSession, user: User, page: int, page_size: int, status: str | None = None):
     q = select(Application)
     if user.role == UserRole.student:
         q = q.where(Application.student_id == user.id)
@@ -54,6 +54,11 @@ async def list_applications(db: AsyncSession, user: User, page: int, page_size: 
         q = (q
             .join(Scholarship, Application.scholarship_id == Scholarship.id)
             .where(Scholarship.category == user.department.value))
+    if status:
+        try:
+            q = q.where(Application.status == ApplicationStatus(status))
+        except ValueError:
+            pass
 
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()
@@ -189,6 +194,16 @@ async def update_eval_status(
 ) -> Application:
     app = await _get_application(db, application_id)
     app.eval_status = data.eval_status
+    await db.commit()
+    await db.refresh(app)
+    return app
+
+
+async def update_eval_score(
+    db: AsyncSession, application_id: int, data: EvalScoreUpdate
+) -> Application:
+    app = await _get_application(db, application_id)
+    app.eval_score = data.model_dump()
     await db.commit()
     await db.refresh(app)
     return app

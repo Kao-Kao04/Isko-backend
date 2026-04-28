@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from app.config import settings
-from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin
+from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration
 
 app = FastAPI(title="IskoMo API", version="1.0.0")
 
@@ -41,6 +41,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(registration.router)
 app.include_router(scholarships.router)
 app.include_router(applications.router)
 app.include_router(documents.router)

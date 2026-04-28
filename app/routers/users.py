@@ -1,27 +1,29 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_osfa
-from app.models.user import User, AccountStatus
+from app.dependencies import require_osfa, require_student
+from app.models.user import User, UserRole, AccountStatus
+from app.models.registration import RegistrationDocument
 from app.schemas.user import UserResponse, UpdateProfileRequest
 from app.schemas.common import PaginatedResponse
 from app.utils.pagination import paginate
-from app.exceptions import NotFoundError
+from app.utils.storage import get_public_url
+from app.exceptions import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+class RejectStudentRequest(BaseModel):
+    remarks: str
 
 
 @router.put("/me", response_model=UserResponse)
 async def update_me(
     data: UpdateProfileRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     profile = current_user.student_profile
@@ -41,8 +43,8 @@ async def list_users(
     _: User = Depends(require_osfa),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(User)
-    count_query = select(func.count(User.id))
+    query = select(User).where(User.role == UserRole.student)
+    count_query = select(func.count(User.id)).where(User.role == UserRole.student)
 
     if account_status:
         query = query.where(User.account_status == account_status)
@@ -55,17 +57,46 @@ async def list_users(
     return paginate(users, total, page, page_size)
 
 
+async def _get_student_or_404(db: AsyncSession, user_id: int) -> User:
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.role == UserRole.student)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User", user_id)
+    return user
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
     _: User = Depends(require_osfa),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise NotFoundError("User", user_id)
-    return user
+    return await _get_student_or_404(db, user_id)
+
+
+@router.get("/{user_id}/registration-documents")
+async def get_registration_documents(
+    user_id: int,
+    _: User = Depends(require_osfa),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_student_or_404(db, user_id)
+    result = await db.execute(
+        select(RegistrationDocument).where(RegistrationDocument.user_id == user_id)
+    )
+    docs = result.scalars().all()
+    return [
+        {
+            "id": d.id,
+            "doc_type": d.doc_type,
+            "filename": d.filename,
+            "url": get_public_url(d.storage_path),
+            "uploaded_at": d.uploaded_at,
+        }
+        for d in docs
+    ]
 
 
 @router.patch("/{user_id}/approve", response_model=UserResponse)
@@ -74,11 +105,11 @@ async def approve_student(
     _: User = Depends(require_osfa),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise NotFoundError("User", user_id)
-    user.account_status = AccountStatus.approved
+    user = await _get_student_or_404(db, user_id)
+    if user.account_status != AccountStatus.pending_verification:
+        raise ValidationError("Only students with pending_verification status can be approved")
+    user.account_status = AccountStatus.verified
+    user.rejection_remarks = None
     await db.commit()
     await db.refresh(user)
     return user
@@ -87,14 +118,15 @@ async def approve_student(
 @router.patch("/{user_id}/reject", response_model=UserResponse)
 async def reject_student(
     user_id: int,
+    data: RejectStudentRequest,
     _: User = Depends(require_osfa),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise NotFoundError("User", user_id)
+    user = await _get_student_or_404(db, user_id)
+    if user.account_status != AccountStatus.pending_verification:
+        raise ValidationError("Only students with pending_verification status can be rejected")
     user.account_status = AccountStatus.rejected
+    user.rejection_remarks = data.remarks
     await db.commit()
     await db.refresh(user)
     return user

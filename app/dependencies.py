@@ -1,4 +1,4 @@
-from fastapi import Depends, Cookie
+from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from jose import JWTError
 
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, AccountStatus
 from app.utils.security import decode_token
 from app.exceptions import UnauthorizedError, ForbiddenError
 
@@ -39,12 +39,30 @@ async def get_current_user(
 
 
 async def require_student(current_user: User = Depends(get_current_user)) -> User:
+    """Email-verified student. Can log in and view dashboard/profile."""
     if current_user.role != UserRole.student:
         raise ForbiddenError("Students only")
+    return current_user
+
+
+async def require_verified_student(current_user: User = Depends(get_current_user)) -> User:
+    """OSFA-approved student. Can apply for scholarships and access all features."""
+    if current_user.role != UserRole.student:
+        raise ForbiddenError("Students only")
+    if current_user.account_status != AccountStatus.verified:
+        raise ForbiddenError(
+            "Your account must be verified by OSFA before you can access this feature"
+        )
     return current_user
 
 
 async def require_osfa(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.osfa_staff:
         raise ForbiddenError("OSFA staff only")
+    return current_user
+
+
+async def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.super_admin:
+        raise ForbiddenError("Super admin access required")
     return current_user

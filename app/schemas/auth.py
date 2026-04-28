@@ -1,20 +1,9 @@
 from pydantic import BaseModel, EmailStr
 
 
-class InitiateRegisterRequest(BaseModel):
+class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
-
-
-class RegisterRequest(BaseModel):
-    token: str
-    student_number: str
-    first_name: str
-    last_name: str
-    middle_name: str | None = None
-    college: str
-    program: str
-    year_level: int
 
 
 class LoginRequest(BaseModel):

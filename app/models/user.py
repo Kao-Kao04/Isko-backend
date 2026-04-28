@@ -12,9 +12,11 @@ class UserRole(str, enum.Enum):
 
 
 class AccountStatus(str, enum.Enum):
-    pending = "pending"
-    approved = "approved"
-    rejected = "rejected"
+    unregistered = "unregistered"          # email verified, no docs submitted yet
+    pending_verification = "pending_verification"  # docs submitted, awaiting OSFA review
+    verified = "verified"                  # OSFA approved
+    rejected = "rejected"                  # OSFA rejected
+    approved = "approved"                  # reserved for OSFA staff accounts
 
 
 class DepartmentEnum(str, enum.Enum):
@@ -31,7 +33,8 @@ class User(Base):
     role = Column(SAEnum(UserRole), nullable=False, default=UserRole.student)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
-    account_status = Column(SAEnum(AccountStatus), nullable=False, default=AccountStatus.pending)
+    account_status = Column(SAEnum(AccountStatus), nullable=False, default=AccountStatus.unregistered)
+    rejection_remarks = Column(String, nullable=True)
     department = Column(SAEnum(DepartmentEnum, name="departmentenum", create_constraint=True), nullable=True, default=None)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -39,6 +42,7 @@ class User(Base):
     student_profile = relationship("StudentProfile", back_populates="user", uselist=False)
     applications = relationship("Application", back_populates="student", foreign_keys="Application.student_id")
     notifications = relationship("Notification", back_populates="user")
+    registration_documents = relationship("RegistrationDocument", back_populates="user", cascade="all, delete-orphan")
 
 
 class StudentProfile(Base):

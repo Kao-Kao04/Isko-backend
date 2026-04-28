@@ -12,7 +12,10 @@ def send_verification_email(to_email: str, token: str) -> None:
     verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
 
     if not settings.MAILERSEND_API_KEY or not settings.MAILERSEND_FROM:
-        logger.info("DEV — verification link for %s: %s", to_email, verification_url)
+        logger.warning(
+            "Email not configured — verification link for %s: %s",
+            to_email, verification_url
+        )
         return
 
     payload = {
@@ -35,12 +38,20 @@ def send_verification_email(to_email: str, token: str) -> None:
         """,
     }
 
-    response = requests.post(
-        MAILERSEND_API_URL,
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {settings.MAILERSEND_API_KEY}",
-            "Content-Type": "application/json",
-        },
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            MAILERSEND_API_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {settings.MAILERSEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        logger.info("Verification email sent to %s", to_email)
+    except Exception as exc:
+        logger.error("Failed to send verification email to %s: %s", to_email, exc)
+        raise RuntimeError(
+            "Could not send verification email. Please try again later."
+        ) from exc

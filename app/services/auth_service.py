@@ -1,96 +1,94 @@
+import secrets
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from jose import JWTError
 
-from app.models.user import User, UserRole, AccountStatus, StudentProfile
-from app.schemas.auth import InitiateRegisterRequest, RegisterRequest, LoginRequest
+from app.models.user import User, UserRole, AccountStatus
+from app.schemas.auth import SignUpRequest, LoginRequest
 from app.utils.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token,
-    create_email_verification_token, decode_registration_token,
 )
-from app.utils.email import send_verification_email
-from app.exceptions import ConflictError, UnauthorizedError, ValidationError
+from app.exceptions import ConflictError, UnauthorizedError
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 
-async def initiate_register(db: AsyncSession, data: InitiateRegisterRequest) -> dict:
+
+async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise ConflictError("Email already registered")
 
-    hashed = hash_password(data.password)
-    token = create_email_verification_token(data.email, hashed)
+    user = User(
+        email=data.email,
+        hashed_password=hash_password(data.password),
+        role=UserRole.student,
+        is_verified=False,
+        account_status=AccountStatus.unregistered,
+    )
+    db.add(user)
+    await db.commit()
 
     if settings.ENVIRONMENT == "development":
-        from app.utils.security import create_registration_token
-        reg_token = create_registration_token(data.email, hashed)
-        return {"dev": True, "token": reg_token}
+        user.is_verified = True
+        await db.commit()
+        return {"dev": True}
 
-    send_verification_email(data.email, token)
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        sb.auth.sign_up({
+            "email": data.email,
+            "password": secrets.token_urlsafe(32),
+            "options": {
+                "email_redirect_to": f"{settings.BACKEND_URL}/api/auth/verify-email",
+            },
+        })
+    except Exception as exc:
+        await db.delete(user)
+        await db.commit()
+        logger.error("Supabase sign_up failed for %s: %s", data.email, exc)
+        raise RuntimeError("Could not send verification email. Please try again.") from exc
+
     return {"dev": False}
 
 
-async def register_student(db: AsyncSession, data: RegisterRequest) -> User:
+async def verify_email_and_activate(db: AsyncSession, code: str) -> str | None:
+    """Exchange Supabase code, find our user by email, mark as verified. Returns email."""
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
     try:
-        payload = decode_registration_token(data.token)
-    except (JWTError, ValueError):
-        raise ValidationError("Invalid or expired registration token")
+        response = sb.auth.exchange_code_for_session({"auth_code": code})
+        email = response.user.email
+    except Exception as exc:
+        logger.warning("Supabase code exchange failed: %s", exc)
+        return None
 
-    email = payload["email"]
-    hashed_password = payload["hashed_password"]
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
 
-    existing = await db.execute(select(User).where(User.email == email))
-    if existing.scalar_one_or_none():
-        raise ConflictError("Email already registered")
+    if not user.is_verified:
+        user.is_verified = True
+        await db.commit()
 
-    sn_check = await db.execute(
-        select(StudentProfile).where(StudentProfile.student_number == data.student_number)
-    )
-    if sn_check.scalar_one_or_none():
-        raise ConflictError("Student number already registered")
-
-    user = User(
-        email=email,
-        hashed_password=hashed_password,
-        role=UserRole.student,
-        is_verified=True,
-        account_status=AccountStatus.approved,
-    )
-    db.add(user)
-    await db.flush()
-
-    profile = StudentProfile(
-        user_id=user.id,
-        student_number=data.student_number,
-        first_name=data.first_name,
-        last_name=data.last_name,
-        middle_name=data.middle_name,
-        college=data.college,
-        program=data.program,
-        year_level=data.year_level,
-    )
-    db.add(profile)
-    await db.commit()
-
-    result = await db.execute(
-        select(User).options(selectinload(User.student_profile)).where(User.id == user.id)
-    )
-    return result.scalar_one()
+    return email
 
 
 async def login(db: AsyncSession, data: LoginRequest) -> dict:
-    result = await db.execute(select(User).where(User.email == data.email, User.is_active == True))
+    result = await db.execute(
+        select(User).where(User.email == data.email, User.is_active == True)
+    )
     user = result.scalar_one_or_none()
+
     if not user or not verify_password(data.password, user.hashed_password):
         raise UnauthorizedError("Invalid credentials")
     if not user.is_verified:
         raise UnauthorizedError("Please verify your email before logging in")
-    if user.account_status == "pending":
-        raise UnauthorizedError("Your account is pending OSFA approval")
-    if user.account_status == "rejected":
-        raise UnauthorizedError("Your account registration was rejected")
 
     payload = {"sub": str(user.id), "role": user.role}
     return {

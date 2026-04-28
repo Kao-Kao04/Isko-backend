@@ -1,42 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel, EmailStr
-from typing import Optional
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_super_admin
 from app.models.user import User, UserRole, DepartmentEnum, AccountStatus
+from app.schemas.admin import StaffCreate, StaffUpdate, StaffResponse
 from app.utils.security import hash_password
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-
-
-def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.super_admin:
-        raise HTTPException(status_code=403, detail="Super admin access required")
-    return current_user
-
-
-class StaffCreate(BaseModel):
-    email: EmailStr
-    password: str
-    department: str
-
-
-class StaffUpdate(BaseModel):
-    department: Optional[str] = None
-    is_active: Optional[bool] = None
-
-
-class StaffResponse(BaseModel):
-    id: int
-    email: str
-    department: Optional[str]
-    is_active: bool
-    created_at: str
-
-    model_config = {"from_attributes": True}
 
 
 @router.get("/staff", response_model=list[StaffResponse])

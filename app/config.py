@@ -17,15 +17,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     ENVIRONMENT: str = "development"
 
-    RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "onboarding@resend.dev"
     FRONTEND_URL: str = "http://localhost:3000"
-
-    GMAIL_USER: str = ""
-    GMAIL_APP_PASSWORD: str = ""
-
-    MAILERSEND_API_KEY: str = ""
-    MAILERSEND_FROM: str = ""
+    BACKEND_URL: str = "http://localhost:8000"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
