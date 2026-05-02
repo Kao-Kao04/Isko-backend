@@ -1,9 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
-from app.models.user import User, AccountStatus, StudentProfile
+from app.models.user import User, AccountStatus, StudentProfile, UserRole
 from app.models.registration import RegistrationDocument, RegistrationDocType
-from app.exceptions import ForbiddenError
+from app.models.notification import Notification
+from app.exceptions import ConflictError, ForbiddenError
 
 
 async def submit_registration(
@@ -25,6 +26,16 @@ async def submit_registration(
 ) -> User:
     if user.account_status not in (AccountStatus.unregistered, AccountStatus.rejected):
         raise ForbiddenError("You have already submitted your registration documents")
+
+    # Reject if another user already owns this student number
+    conflict = await db.execute(
+        select(StudentProfile).where(
+            StudentProfile.student_number == student_number,
+            StudentProfile.user_id != user.id,
+        )
+    )
+    if conflict.scalar_one_or_none():
+        raise ConflictError("This student number is already registered to another account.")
 
     # Upsert StudentProfile
     result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == user.id))
@@ -72,6 +83,19 @@ async def submit_registration(
 
     user.account_status = AccountStatus.pending_verification
     user.rejection_remarks = None
+
+    # Notify all OSFA staff about the new pending registration
+    full_name = f"{first_name} {last_name}".strip()
+    osfa_result = await db.execute(
+        select(User).where(User.role == UserRole.osfa_staff, User.is_active == True)
+    )
+    for staff in osfa_result.scalars().all():
+        db.add(Notification(
+            user_id=staff.id,
+            title="New Registration Pending",
+            body=f"{full_name} ({user.email}) has submitted registration documents and is awaiting your review.",
+        ))
+
     await db.commit()
     await db.refresh(user)
     return user

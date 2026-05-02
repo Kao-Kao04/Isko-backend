@@ -15,7 +15,7 @@ class RegistrationDocument(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    doc_type = Column(SAEnum(RegistrationDocType), nullable=False)
+    doc_type = Column(SAEnum(RegistrationDocType, native_enum=False), nullable=False)
     filename = Column(String, nullable=False)
     storage_path = Column(String, nullable=False)
     content_type = Column(String, nullable=False)

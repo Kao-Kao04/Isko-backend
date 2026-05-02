@@ -17,6 +17,13 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -46,7 +53,7 @@ async def login(data: LoginRequest, response: Response, db: AsyncSession = Depen
     tokens = await auth_service.login(db, data)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=(settings.ENVIRONMENT == "production"), samesite="lax", max_age=60 * 60 * 24 * 7,
     )
     return TokenResponse(access_token=tokens["access_token"])
 
@@ -59,7 +66,7 @@ async def refresh(response: Response, refresh_token: str | None = Cookie(default
     tokens = auth_service.refresh_tokens(refresh_token)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=(settings.ENVIRONMENT == "production"), samesite="lax", max_age=60 * 60 * 24 * 7,
     )
     return TokenResponse(access_token=tokens["access_token"])
 
@@ -88,3 +95,18 @@ async def change_password(
     current_user.hashed_password = hash_password(data.new_password)
     await db.commit()
     return {"message": "Password updated successfully"}
+
+
+@router.post("/forgot-password", status_code=200)
+async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    # Always return 200 to prevent email enumeration
+    await auth_service.send_password_reset(db, data.email)
+    return {"message": "If that email is registered, a reset link has been sent."}
+
+
+@router.post("/reset-password", status_code=200)
+async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    if len(data.new_password) < 8:
+        raise ValidationError("Password must be at least 8 characters")
+    await auth_service.reset_password(db, data.token, data.new_password)
+    return {"message": "Password reset successfully. You can now log in."}

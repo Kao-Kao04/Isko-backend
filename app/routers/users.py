@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import require_osfa, require_student
@@ -43,7 +44,7 @@ async def list_users(
     _: User = Depends(require_osfa),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(User).where(User.role == UserRole.student)
+    query = select(User).options(selectinload(User.student_profile)).where(User.role == UserRole.student)
     count_query = select(func.count(User.id)).where(User.role == UserRole.student)
 
     if account_status:
@@ -59,7 +60,9 @@ async def list_users(
 
 async def _get_student_or_404(db: AsyncSession, user_id: int) -> User:
     result = await db.execute(
-        select(User).where(User.id == user_id, User.role == UserRole.student)
+        select(User)
+        .options(selectinload(User.student_profile))
+        .where(User.id == user_id, User.role == UserRole.student)
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -111,8 +114,7 @@ async def approve_student(
     user.account_status = AccountStatus.verified
     user.rejection_remarks = None
     await db.commit()
-    await db.refresh(user)
-    return user
+    return await _get_student_or_404(db, user_id)
 
 
 @router.patch("/{user_id}/reject", response_model=UserResponse)
@@ -128,5 +130,4 @@ async def reject_student(
     user.account_status = AccountStatus.rejected
     user.rejection_remarks = data.remarks
     await db.commit()
-    await db.refresh(user)
-    return user
+    return await _get_student_or_404(db, user_id)

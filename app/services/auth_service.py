@@ -11,8 +11,10 @@ from app.utils.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token,
 )
-from app.exceptions import ConflictError, UnauthorizedError
+from app.exceptions import ConflictError, UnauthorizedError, ValidationError
 from app.config import settings
+
+RESET_TOKEN_EXPIRE_MINUTES = 30
 
 logger = logging.getLogger(__name__)
 
@@ -110,3 +112,52 @@ def refresh_tokens(refresh_token: str) -> dict:
         "access_token": create_access_token(token_payload),
         "refresh_token": create_refresh_token(token_payload),
     }
+
+
+async def send_password_reset(db: AsyncSession, email: str) -> None:
+    from datetime import timedelta
+    from jose import jwt
+    from app.utils.email import send_reset_email
+
+    result = await db.execute(
+        select(User).where(User.email == email, User.is_active == True)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        return  # Silent — don't reveal if email exists
+
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "type": "password_reset",
+            "exp": __import__("datetime").datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+        },
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+
+    if settings.ENVIRONMENT == "development":
+        logger.info("DEV — password reset link for %s: %s", email, reset_url)
+        return
+
+    send_reset_email(email, reset_url)
+
+
+async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+    from jose import jwt, JWTError as JoseJWTError
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "password_reset":
+            raise ValidationError("Invalid reset token")
+        user_id = int(payload["sub"])
+    except JoseJWTError:
+        raise ValidationError("Reset link has expired or is invalid. Please request a new one.")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise ValidationError("User not found")
+
+    user.hashed_password = hash_password(new_password)
+    await db.commit()
