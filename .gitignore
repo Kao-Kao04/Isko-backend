@@ -7,6 +7,5 @@ venv/
 dist/
 .pytest_cache/
 .mypy_cache/
-alembic/versions/*.py
 access_token.txt
 node_modules/
