@@ -17,7 +17,11 @@ target_metadata = Base.metadata
 def get_sync_url() -> str:
     url = settings.DATABASE_URL
     # Alembic uses psycopg2 (sync); strip asyncpg driver if present
-    return url.replace("postgresql+asyncpg://", "postgresql://")
+    url = url.replace("postgresql+asyncpg://", "postgresql://")
+    # Supabase requires SSL; psycopg2 doesn't negotiate it automatically
+    if "sslmode" not in url:
+        url += "?sslmode=require"
+    return url
 
 
 def run_migrations_offline() -> None:
