@@ -119,7 +119,14 @@ async def update_status(db: AsyncSession, scholarship_id: int, data: Scholarship
 
 
 async def delete_scholarship(db: AsyncSession, scholarship_id: int) -> None:
-    scholarship = await get_scholarship(db, scholarship_id)
+    result = await db.execute(
+        select(Scholarship)
+        .options(selectinload(Scholarship.applications), selectinload(Scholarship.requirements))
+        .where(Scholarship.id == scholarship_id)
+    )
+    scholarship = result.scalar_one_or_none()
+    if not scholarship:
+        raise NotFoundError("Scholarship", scholarship_id)
     await db.delete(scholarship)
     await db.commit()
 
