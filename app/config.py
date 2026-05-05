@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
     SUPABASE_BUCKET: str = "isko-documents"
 
-    MAILERSEND_API_KEY: str = ""
-    MAILERSEND_FROM: str = ""
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = ""
 
     CORS_ORIGINS: str = "http://localhost:3000"
     ENVIRONMENT: str = "development"
