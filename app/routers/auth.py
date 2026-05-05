@@ -53,7 +53,7 @@ async def login(data: LoginRequest, response: Response, db: AsyncSession = Depen
     tokens = await auth_service.login(db, data)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=(settings.ENVIRONMENT == "production"), samesite="lax", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=True, samesite="none", max_age=60 * 60 * 24 * 7,
     )
     return TokenResponse(access_token=tokens["access_token"])
 
@@ -66,7 +66,7 @@ async def refresh(response: Response, refresh_token: str | None = Cookie(default
     tokens = auth_service.refresh_tokens(refresh_token)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=(settings.ENVIRONMENT == "production"), samesite="lax", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=True, samesite="none", max_age=60 * 60 * 24 * 7,
     )
     return TokenResponse(access_token=tokens["access_token"])
 
