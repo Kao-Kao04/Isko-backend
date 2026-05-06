@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.limiter import limiter
-from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws
+from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws, workflow
 
 app = FastAPI(title="IskoMo API", version="1.0.0")
 app.state.limiter = limiter
@@ -50,6 +50,7 @@ app.include_router(notifications.router)
 app.include_router(scholars.router)
 app.include_router(reports.router)
 app.include_router(admin.router)
+app.include_router(workflow.router)
 app.include_router(ws.router)
 
 
