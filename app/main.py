@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from slowapi import _rate_limit_exceeded_handler
@@ -21,13 +20,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-if settings.ENVIRONMENT == "production":
-    # TrustedHostMiddleware checks the 'Host' header of the request (which is the backend's domain),
-    # not the 'Origin' header (which is the frontend's domain).
-    # By default, Railway uses *.railway.app domains.
-    backend_host = settings.BACKEND_URL.replace("https://", "").replace("http://", "").split("/")[0]
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*", backend_host, "*.railway.app"])
 
 
 @app.exception_handler(RequestValidationError)
