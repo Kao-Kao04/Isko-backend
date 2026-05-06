@@ -9,6 +9,7 @@ class SignUpRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    remember_me: bool = False
 
 
 class TokenResponse(BaseModel):

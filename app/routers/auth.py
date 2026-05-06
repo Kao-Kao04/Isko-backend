@@ -55,9 +55,10 @@ async def verify_email(code: str | None = None, db: AsyncSession = Depends(get_d
 @router.post("/login")
 async def login(data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     tokens = await auth_service.login(db, data)
+    max_age = 60 * 60 * 24 * 30 if data.remember_me else None  # 30 days or session cookie
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
-        httponly=True, secure=True, samesite="none", max_age=60 * 60 * 24 * 7,
+        httponly=True, secure=True, samesite="none", max_age=max_age,
     )
     return TokenResponse(access_token=tokens["access_token"])
 
