@@ -1,4 +1,3 @@
-import secrets
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,34 +38,40 @@ async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
         await db.commit()
         return {"dev": True}
 
-    from app.utils.storage import get_supabase
-    sb = get_supabase()
-    try:
-        sb.auth.sign_up({
+    from datetime import datetime, timedelta
+    from jose import jwt
+    from app.utils.email import send_verification_email
+
+    token = jwt.encode(
+        {
             "email": data.email,
-            "password": secrets.token_urlsafe(32),
-            "options": {
-                "email_redirect_to": f"{settings.BACKEND_URL}/api/auth/verify-email",
-            },
-        })
+            "type": "email_verification",
+            "exp": datetime.utcnow() + timedelta(hours=24),
+        },
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+    try:
+        send_verification_email(data.email, token)
     except Exception as exc:
         await db.delete(user)
         await db.commit()
-        logger.error("Supabase sign_up failed for %s: %s", data.email, exc)
+        logger.error("Failed to send verification email to %s: %s", data.email, exc)
         raise RuntimeError("Could not send verification email. Please try again.") from exc
 
     return {"dev": False}
 
 
-async def verify_email_and_activate(db: AsyncSession, code: str) -> str | None:
-    """Exchange Supabase code, find our user by email, mark as verified. Returns email."""
-    from app.utils.storage import get_supabase
-    sb = get_supabase()
+async def verify_email_and_activate(db: AsyncSession, token: str) -> str | None:
+    """Decode JWT verification token, find our user by email, mark as verified. Returns email."""
+    from jose import jwt, JWTError as JoseJWTError
     try:
-        response = sb.auth.exchange_code_for_session({"auth_code": code})
-        email = response.user.email
-    except Exception as exc:
-        logger.warning("Supabase code exchange failed: %s", exc)
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "email_verification":
+            return None
+        email = payload["email"]
+    except JoseJWTError:
+        logger.warning("Email verification token decode failed")
         return None
 
     result = await db.execute(select(User).where(User.email == email))

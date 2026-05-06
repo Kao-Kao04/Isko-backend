@@ -37,11 +37,11 @@ async def signup(data: SignUpRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/verify-email")
-async def verify_email(code: str | None = None, db: AsyncSession = Depends(get_db)):
-    if not code:
+async def verify_email(token: str | None = None, db: AsyncSession = Depends(get_db)):
+    if not token:
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
 
-    email = await auth_service.verify_email_and_activate(db, code)
+    email = await auth_service.verify_email_and_activate(db, token)
     if not email:
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
 
