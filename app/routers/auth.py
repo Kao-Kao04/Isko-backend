@@ -23,6 +23,10 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+class SupabaseResetPasswordRequest(BaseModel):
+    access_token: str
+    new_password: str
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -116,4 +120,12 @@ async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(
     if len(data.new_password) < 8:
         raise ValidationError("Password must be at least 8 characters")
     await auth_service.reset_password(db, data.token, data.new_password)
+    return {"message": "Password reset successfully. You can now log in."}
+
+
+@router.post("/reset-password-token", status_code=200)
+async def reset_password_token(data: SupabaseResetPasswordRequest):
+    if len(data.new_password) < 8:
+        raise ValidationError("Password must be at least 8 characters")
+    await auth_service.reset_password_with_supabase_token(data.access_token, data.new_password)
     return {"message": "Password reset successfully. You can now log in."}

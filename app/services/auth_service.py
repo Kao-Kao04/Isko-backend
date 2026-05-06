@@ -178,7 +178,7 @@ async def send_password_reset(db: AsyncSession, email: str) -> None:
     try:
         sb.auth.reset_password_for_email(
             email,
-            {"redirect_to": f"{settings.BACKEND_URL}/api/auth/reset-callback"},
+            {"redirect_to": f"{settings.FRONTEND_URL}/reset-password"},
         )
     except Exception as exc:
         logger.error("Supabase reset_password_for_email failed for %s: %s", email, exc)
@@ -234,6 +234,24 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
 
     from app.utils.storage import get_supabase
     sb = get_supabase()
+    try:
+        sb.auth.admin.update_user_by_id(supabase_uid, {"password": new_password})
+    except Exception as exc:
+        logger.error("Supabase admin update_user failed for uid %s: %s", supabase_uid, exc)
+        raise ValidationError("Could not update password. Please request a new reset link.")
+
+
+async def reset_password_with_supabase_token(access_token: str, new_password: str) -> None:
+    """Reset password using the Supabase access_token from the email link hash."""
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        user_response = sb.auth.get_user(access_token)
+        supabase_uid = str(user_response.user.id)
+    except Exception as exc:
+        logger.warning("Invalid Supabase access_token for password reset: %s", exc)
+        raise ValidationError("Reset link has expired or is invalid. Please request a new one.")
+
     try:
         sb.auth.admin.update_user_by_id(supabase_uid, {"password": new_password})
     except Exception as exc:
