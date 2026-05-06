@@ -8,7 +8,6 @@ from app.dependencies import get_current_user
 from app.schemas.auth import SignUpRequest, LoginRequest, TokenResponse
 from app.schemas.user import UserResponse
 from app.services import auth_service
-from app.utils.security import verify_password, hash_password
 from app.exceptions import ValidationError
 from app.config import settings
 
@@ -37,11 +36,11 @@ async def signup(data: SignUpRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/verify-email")
-async def verify_email(token: str | None = None, db: AsyncSession = Depends(get_db)):
-    if not token:
+async def verify_email(code: str | None = None, db: AsyncSession = Depends(get_db)):
+    if not code:
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
 
-    email = await auth_service.verify_email_and_activate(db, token)
+    email = await auth_service.verify_email_and_activate(db, code)
     if not email:
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
 
@@ -88,20 +87,28 @@ async def change_password(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if not verify_password(data.current_password, current_user.hashed_password):
-        raise ValidationError("Current password is incorrect")
     if len(data.new_password) < 8:
         raise ValidationError("New password must be at least 8 characters")
-    current_user.hashed_password = hash_password(data.new_password)
-    await db.commit()
+    await auth_service.change_password(db, current_user, data.current_password, data.new_password)
     return {"message": "Password updated successfully"}
 
 
 @router.post("/forgot-password", status_code=200)
 async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
-    # Always return 200 to prevent email enumeration
     await auth_service.send_password_reset(db, data.email)
     return {"message": "If that email is registered, a reset link has been sent."}
+
+
+@router.get("/reset-callback")
+async def reset_callback(code: str | None = None):
+    if not code:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
+
+    token = await auth_service.handle_reset_callback(code)
+    if not token:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_token")
+
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/reset-password?token={token}")
 
 
 @router.post("/reset-password", status_code=200)

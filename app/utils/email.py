@@ -47,7 +47,7 @@ def send_reset_email(to_email: str, reset_url: str) -> None:
 
 
 def send_verification_email(to_email: str, token: str) -> None:
-    verification_url = f"{settings.BACKEND_URL}/api/auth/verify-email?token={token}"
+    verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
     logger.info("Verification link for %s: %s", to_email, verification_url)
     _send(
         to_email=to_email,

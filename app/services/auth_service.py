@@ -23,55 +23,56 @@ async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
     if existing.scalar_one_or_none():
         raise ConflictError("Email already registered")
 
+    if settings.ENVIRONMENT == "development":
+        user = User(
+            email=data.email,
+            hashed_password=hash_password(data.password),
+            role=UserRole.student,
+            is_verified=True,
+            account_status=AccountStatus.unregistered,
+        )
+        db.add(user)
+        await db.commit()
+        return {"dev": True}
+
+    import secrets
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        sb.auth.sign_up({
+            "email": data.email,
+            "password": data.password,
+            "options": {
+                "email_redirect_to": f"{settings.BACKEND_URL}/api/auth/verify-email",
+            },
+        })
+    except Exception as exc:
+        logger.error("Supabase sign_up failed for %s: %s", data.email, exc)
+        raise RuntimeError("Could not send verification email. Please try again.") from exc
+
+    # hashed_password column is NOT NULL — store a random placeholder.
+    # Supabase is the authority for passwords in production.
     user = User(
         email=data.email,
-        hashed_password=hash_password(data.password),
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
         role=UserRole.student,
         is_verified=False,
         account_status=AccountStatus.unregistered,
     )
     db.add(user)
     await db.commit()
-
-    if settings.ENVIRONMENT == "development":
-        user.is_verified = True
-        await db.commit()
-        return {"dev": True}
-
-    from datetime import datetime, timedelta
-    from jose import jwt
-    from app.utils.email import send_verification_email
-
-    token = jwt.encode(
-        {
-            "email": data.email,
-            "type": "email_verification",
-            "exp": datetime.utcnow() + timedelta(hours=24),
-        },
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
-    )
-    try:
-        send_verification_email(data.email, token)
-    except Exception as exc:
-        await db.delete(user)
-        await db.commit()
-        logger.error("Failed to send verification email to %s: %s", data.email, exc)
-        raise RuntimeError("Could not send verification email. Please try again.") from exc
-
     return {"dev": False}
 
 
-async def verify_email_and_activate(db: AsyncSession, token: str) -> str | None:
-    """Decode JWT verification token, find our user by email, mark as verified. Returns email."""
-    from jose import jwt, JWTError as JoseJWTError
+async def verify_email_and_activate(db: AsyncSession, code: str) -> str | None:
+    """Exchange Supabase code, find our user by email, mark as verified. Returns email."""
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        if payload.get("type") != "email_verification":
-            return None
-        email = payload["email"]
-    except JoseJWTError:
-        logger.warning("Email verification token decode failed")
+        response = sb.auth.exchange_code_for_session({"auth_code": code})
+        email = response.user.email
+    except Exception as exc:
+        logger.warning("Supabase code exchange failed: %s", exc)
         return None
 
     result = await db.execute(select(User).where(User.email == email))
@@ -87,13 +88,28 @@ async def verify_email_and_activate(db: AsyncSession, token: str) -> str | None:
 
 
 async def login(db: AsyncSession, data: LoginRequest) -> dict:
-    result = await db.execute(
-        select(User).where(User.email == data.email, User.is_active == True)
-    )
-    user = result.scalar_one_or_none()
+    if settings.ENVIRONMENT == "development":
+        result = await db.execute(
+            select(User).where(User.email == data.email, User.is_active == True)
+        )
+        user = result.scalar_one_or_none()
+        if not user or not verify_password(data.password, user.hashed_password):
+            raise UnauthorizedError("Invalid credentials")
+    else:
+        from app.utils.storage import get_supabase
+        sb = get_supabase()
+        try:
+            sb.auth.sign_in_with_password({"email": data.email, "password": data.password})
+        except Exception:
+            raise UnauthorizedError("Invalid credentials")
 
-    if not user or not verify_password(data.password, user.hashed_password):
-        raise UnauthorizedError("Invalid credentials")
+        result = await db.execute(
+            select(User).where(User.email == data.email, User.is_active == True)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise UnauthorizedError("Invalid credentials")
+
     if not user.is_verified:
         raise UnauthorizedError("Please verify your email before logging in")
 
@@ -120,10 +136,6 @@ def refresh_tokens(refresh_token: str) -> dict:
 
 
 async def send_password_reset(db: AsyncSession, email: str) -> None:
-    from datetime import timedelta
-    from jose import jwt
-    from app.utils.email import send_reset_email
-
     result = await db.execute(
         select(User).where(User.email == email, User.is_active == True)
     )
@@ -131,22 +143,56 @@ async def send_password_reset(db: AsyncSession, email: str) -> None:
     if not user:
         return  # Silent — don't reveal if email exists
 
+    if settings.ENVIRONMENT == "development":
+        from datetime import timedelta
+        from jose import jwt
+        token = jwt.encode(
+            {
+                "sub": str(user.id),
+                "type": "password_reset",
+                "exp": __import__("datetime").datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+            },
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM,
+        )
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+        logger.info("DEV — password reset link for %s: %s", email, reset_url)
+        return
+
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        sb.auth.reset_password_for_email(
+            email,
+            {"redirect_to": f"{settings.BACKEND_URL}/api/auth/reset-callback"},
+        )
+    except Exception as exc:
+        logger.error("Supabase reset_password_for_email failed for %s: %s", email, exc)
+
+
+async def handle_reset_callback(code: str) -> str | None:
+    """Exchange Supabase reset code, return our short-lived reset JWT containing the Supabase UID."""
+    from datetime import timedelta
+    from jose import jwt
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        response = sb.auth.exchange_code_for_session({"auth_code": code})
+        supabase_uid = str(response.user.id)
+    except Exception as exc:
+        logger.warning("Supabase reset code exchange failed: %s", exc)
+        return None
+
     token = jwt.encode(
         {
-            "sub": str(user.id),
+            "supabase_uid": supabase_uid,
             "type": "password_reset",
             "exp": __import__("datetime").datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
         },
         settings.SECRET_KEY,
         algorithm=settings.ALGORITHM,
     )
-    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-
-    if settings.ENVIRONMENT == "development":
-        logger.info("DEV — password reset link for %s: %s", email, reset_url)
-        return
-
-    send_reset_email(email, reset_url)
+    return token
 
 
 async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
@@ -155,14 +201,50 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         if payload.get("type") != "password_reset":
             raise ValidationError("Invalid reset token")
-        user_id = int(payload["sub"])
     except JoseJWTError:
         raise ValidationError("Reset link has expired or is invalid. Please request a new one.")
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise ValidationError("User not found")
+    if settings.ENVIRONMENT == "development":
+        user_id = int(payload["sub"])
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise ValidationError("User not found")
+        user.hashed_password = hash_password(new_password)
+        await db.commit()
+        return
 
-    user.hashed_password = hash_password(new_password)
-    await db.commit()
+    supabase_uid = payload.get("supabase_uid")
+    if not supabase_uid:
+        raise ValidationError("Invalid reset token")
+
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        sb.auth.admin.update_user_by_id(supabase_uid, {"password": new_password})
+    except Exception as exc:
+        logger.error("Supabase admin update_user failed for uid %s: %s", supabase_uid, exc)
+        raise ValidationError("Could not update password. Please request a new reset link.")
+
+
+async def change_password(db: AsyncSession, current_user: User, current_password: str, new_password: str) -> None:
+    if settings.ENVIRONMENT == "development":
+        if not verify_password(current_password, current_user.hashed_password):
+            raise ValidationError("Current password is incorrect")
+        current_user.hashed_password = hash_password(new_password)
+        await db.commit()
+        return
+
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        sb_response = sb.auth.sign_in_with_password({"email": current_user.email, "password": current_password})
+        supabase_uid = str(sb_response.user.id)
+    except Exception:
+        raise ValidationError("Current password is incorrect")
+
+    try:
+        sb.auth.admin.update_user_by_id(supabase_uid, {"password": new_password})
+    except Exception as exc:
+        logger.error("Supabase admin update_user failed for %s: %s", current_user.email, exc)
+        raise ValidationError("Could not update password. Please try again.")
