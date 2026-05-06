@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, Cookie
+from fastapi import APIRouter, Depends, Response, Cookie, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from app.schemas.user import UserResponse
 from app.services import auth_service
 from app.exceptions import ValidationError
 from app.config import settings
+from app.limiter import limiter
 
 
 class ChangePasswordRequest(BaseModel):
@@ -98,7 +99,8 @@ async def change_password(
 
 
 @router.post("/forgot-password", status_code=200)
-async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/15minutes")
+async def forgot_password(request: Request, data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):  # noqa: ARG001
     await auth_service.send_password_reset(db, data.email)
     return {"message": "If that email is registered, a reset link has been sent."}
 
