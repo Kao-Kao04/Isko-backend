@@ -23,8 +23,11 @@ app.add_middleware(
 )
 
 if settings.ENVIRONMENT == "production":
-    allowed = [h.strip().replace("https://", "").replace("http://", "") for h in settings.get_cors_origins()]
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed)
+    # TrustedHostMiddleware checks the 'Host' header of the request (which is the backend's domain),
+    # not the 'Origin' header (which is the frontend's domain).
+    # By default, Railway uses *.railway.app domains.
+    backend_host = settings.BACKEND_URL.replace("https://", "").replace("http://", "").split("/")[0]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*", backend_host, "*.railway.app"])
 
 
 @app.exception_handler(RequestValidationError)
