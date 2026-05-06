@@ -88,27 +88,26 @@ async def verify_email_and_activate(db: AsyncSession, code: str) -> str | None:
 
 
 async def login(db: AsyncSession, data: LoginRequest) -> dict:
-    if settings.ENVIRONMENT == "development":
-        result = await db.execute(
-            select(User).where(User.email == data.email, User.is_active == True)
-        )
-        user = result.scalar_one_or_none()
-        if not user or not verify_password(data.password, user.hashed_password):
-            raise UnauthorizedError("Invalid credentials")
-    else:
+    result = await db.execute(
+        select(User).where(User.email == data.email, User.is_active == True)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise UnauthorizedError("Invalid credentials")
+
+    # Try bcrypt first (existing users whose passwords are stored locally).
+    # Fall back to Supabase for users created via the new signup flow.
+    if verify_password(data.password, user.hashed_password):
+        pass  # bcrypt match — existing user, login OK
+    elif settings.ENVIRONMENT != "development":
         from app.utils.storage import get_supabase
         sb = get_supabase()
         try:
             sb.auth.sign_in_with_password({"email": data.email, "password": data.password})
         except Exception:
             raise UnauthorizedError("Invalid credentials")
-
-        result = await db.execute(
-            select(User).where(User.email == data.email, User.is_active == True)
-        )
-        user = result.scalar_one_or_none()
-        if not user:
-            raise UnauthorizedError("Invalid credentials")
+    else:
+        raise UnauthorizedError("Invalid credentials")
 
     if not user.is_verified:
         raise UnauthorizedError("Please verify your email before logging in")
@@ -159,8 +158,23 @@ async def send_password_reset(db: AsyncSession, email: str) -> None:
         logger.info("DEV — password reset link for %s: %s", email, reset_url)
         return
 
+    import secrets
     from app.utils.storage import get_supabase
     sb = get_supabase()
+
+    # Ensure the user exists in Supabase Auth. Existing users who signed up
+    # before the Supabase migration only live in our DB — create them on demand
+    # with a random password so Supabase can send the reset email.
+    try:
+        sb.auth.admin.create_user({
+            "email": email,
+            "password": secrets.token_urlsafe(32),
+            "email_confirm": True,
+        })
+        logger.info("Auto-created Supabase Auth user for existing account: %s", email)
+    except Exception:
+        pass  # Already exists in Supabase Auth — that's fine
+
     try:
         sb.auth.reset_password_for_email(
             email,
