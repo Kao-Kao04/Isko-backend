@@ -95,9 +95,15 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
     if existing.scalar_one_or_none():
         raise ConflictError("Already applied to this scholarship")
 
+    from sqlalchemy.exc import IntegrityError
     app = Application(student_id=student.id, scholarship_id=data.scholarship_id)
     db.add(app)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise ConflictError("Already applied to this scholarship")
+
     await append_audit(db, app.id, student.id, "submitted", to_status=ApplicationStatus.pending)
     await create_notification(
         db, student.id, "Application Submitted",
@@ -143,10 +149,17 @@ async def withdraw_application(db: AsyncSession, application_id: int, student: U
     await db.commit()
 
 
+def _check_department_ownership(app: Application, staff: User) -> None:
+    """Ensure OSFA staff only act on scholarships within their department."""
+    if staff.department and app.scholarship and app.scholarship.category != staff.department:
+        raise ForbiddenError("This scholarship belongs to a different department")
+
+
 async def update_application_status(
     db: AsyncSession, application_id: int, data: ApplicationStatusUpdate, staff: User
 ) -> Application:
     app = await _get_application(db, application_id)
+    _check_department_ownership(app, staff)
     old_status = app.status
 
     allowed_transitions = {
@@ -190,9 +203,10 @@ async def update_application_status(
 
 
 async def update_eval_status(
-    db: AsyncSession, application_id: int, data: EvalStatusUpdate, _: User
+    db: AsyncSession, application_id: int, data: EvalStatusUpdate, staff: User
 ) -> Application:
     app = await _get_application(db, application_id)
+    _check_department_ownership(app, staff)
     app.eval_status = data.eval_status
     await db.commit()
     await db.refresh(app)

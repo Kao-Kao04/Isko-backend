@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, insert
 
 from app.models.notification import Notification
 from app.models.user import User, UserRole
@@ -16,17 +16,33 @@ async def create_notification(
     notif = Notification(user_id=user_id, title=title, body=body, application_id=application_id)
     db.add(notif)
     await db.flush()
+
+    from app.websocket import manager
+    await manager.send(user_id, {
+        "type": "notification",
+        "id": notif.id,
+        "title": title,
+        "body": body,
+        "application_id": application_id,
+    })
     return notif
 
 
 async def broadcast_announcement(db: AsyncSession, title: str, body: str) -> int:
-    result = await db.execute(select(User).where(User.role == UserRole.student, User.is_active == True))
-    students = result.scalars().all()
-    for student in students:
-        notif = Notification(user_id=student.id, title=title, body=body)
-        db.add(notif)
+    # Get only IDs — avoids loading full User objects into memory
+    id_result = await db.execute(
+        select(User.id).where(User.role == UserRole.student, User.is_active == True)
+    )
+    student_ids = id_result.scalars().all()
+    if not student_ids:
+        return 0
+
+    await db.execute(
+        insert(Notification),
+        [{"user_id": uid, "title": title, "body": body} for uid in student_ids],
+    )
     await db.commit()
-    return len(students)
+    return len(student_ids)
 
 
 async def list_notifications(db: AsyncSession, user_id: int, page: int, page_size: int):

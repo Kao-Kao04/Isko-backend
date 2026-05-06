@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/applications", tags=["applications"])
 @router.get("", response_model=PaginatedResponse[ApplicationResponse])
 async def list_applications(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=500),
+    page_size: int = Query(20, ge=1, le=50),
     status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -91,6 +91,7 @@ async def update_eval_status(
     db: AsyncSession = Depends(get_db),
 ):
     return await application_service.update_eval_status(db, application_id, data, current_user)
+
 
 
 @router.patch("/{application_id}/eval-score", response_model=ApplicationResponse)

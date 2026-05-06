@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.limiter import limiter
-from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration
+from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws
 
 app = FastAPI(title="IskoMo API", version="1.0.0")
 app.state.limiter = limiter
@@ -23,7 +23,8 @@ app.add_middleware(
 )
 
 if settings.ENVIRONMENT == "production":
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+    allowed = [h.strip().replace("https://", "").replace("http://", "") for h in settings.get_cors_origins()]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed)
 
 
 @app.exception_handler(RequestValidationError)
@@ -54,6 +55,7 @@ app.include_router(notifications.router)
 app.include_router(scholars.router)
 app.include_router(reports.router)
 app.include_router(admin.router)
+app.include_router(ws.router)
 
 
 @app.get("/health")

@@ -1,5 +1,4 @@
 import logging
-import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,17 +18,17 @@ RESET_COOLDOWN_SECONDS = 60  # 1 minute per email
 
 logger = logging.getLogger(__name__)
 
-_reset_cooldowns: dict[str, float] = {}
+# TTLCache auto-evicts entries after RESET_COOLDOWN_SECONDS — no memory leak
+from cachetools import TTLCache
+_reset_cooldowns: TTLCache = TTLCache(maxsize=10_000, ttl=RESET_COOLDOWN_SECONDS)
 
 
 def _check_email_cooldown(email: str) -> None:
-    now = time.time()
-    last = _reset_cooldowns.get(email, 0)
-    remaining = int(RESET_COOLDOWN_SECONDS - (now - last))
-    if remaining > 0:
+    if email in _reset_cooldowns:
+        # TTL hasn't expired yet — entry still present means cooldown active
         from app.exceptions import ValidationError as VE
-        raise VE(f"Please wait {remaining} seconds before requesting another reset link.")
-    _reset_cooldowns[email] = now
+        raise VE(f"Please wait {RESET_COOLDOWN_SECONDS} seconds before requesting another reset link.")
+    _reset_cooldowns[email] = True
 
 
 async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
