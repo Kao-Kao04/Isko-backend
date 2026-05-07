@@ -29,54 +29,80 @@ sub_status_enum = sa.Enum(
 
 
 def upgrade() -> None:
-    main_status_enum.create(op.get_bind(), checkfirst=True)
-    sub_status_enum.create(op.get_bind(), checkfirst=True)
+    # Use DO block to safely create enums — handles already-exists from prior failed attempts
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE mainstatus AS ENUM (
+                'application','verification','interview','decision','completion','withdrawn','rejected'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE substatus AS ENUM (
+                'submitted','screening','screening_passed','screening_failed',
+                'pending_validation','revision_requested','validated','validation_failed',
+                'not_scheduled','scheduled','rescheduled','interview_completed','evaluated',
+                'under_review','approved','rejected','waitlisted',
+                'pending_requirements','requirements_submitted','completed',
+                'withdrawn'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
 
-    # New workflow columns on applications
-    op.add_column('applications', sa.Column('main_status', main_status_enum, nullable=True))
-    op.add_column('applications', sa.Column('sub_status',  sub_status_enum,  nullable=True))
-    op.add_column('applications', sa.Column('screened_at',             sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('validated_at',            sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('interview_scheduled_at',  sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('interview_datetime',      sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('interview_completed_at',  sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('evaluated_at',            sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('decision_released_at',    sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('completion_submitted_at', sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('closed_at',               sa.DateTime(timezone=True), nullable=True))
-    op.add_column('applications', sa.Column('interview_location',      sa.String(), nullable=True))
-    op.add_column('applications', sa.Column('interview_notes',         sa.Text(),   nullable=True))
-    op.add_column('applications', sa.Column('decision_remarks',        sa.Text(),   nullable=True))
+    # Add columns with IF NOT EXISTS to survive re-runs after partial failures
+    cols = [
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS main_status mainstatus",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS sub_status substatus",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS screened_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_scheduled_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_datetime TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_completed_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS evaluated_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS decision_released_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS completion_submitted_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_location VARCHAR",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_notes TEXT",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS decision_remarks TEXT",
+    ]
+    for col in cols:
+        op.execute(col)
 
     # Existing applications start with NULL main_status/sub_status.
     # OSFA staff can initialize them via POST /api/workflow/{id}/initialize.
 
     # workflow_logs table
-    op.create_table(
-        'workflow_logs',
-        sa.Column('id',             sa.Integer(), primary_key=True),
-        sa.Column('application_id', sa.Integer(), sa.ForeignKey('applications.id'), nullable=False),
-        sa.Column('changed_by',     sa.Integer(), sa.ForeignKey('users.id'),        nullable=False),
-        sa.Column('from_main',      main_status_enum, nullable=True),
-        sa.Column('from_sub',       sub_status_enum,  nullable=True),
-        sa.Column('to_main',        main_status_enum, nullable=False),
-        sa.Column('to_sub',         sub_status_enum,  nullable=False),
-        sa.Column('note',           sa.Text(), nullable=True),
-        sa.Column('created_at',     sa.DateTime(timezone=True), server_default=sa.func.now()),
-    )
-    op.create_index('ix_workflow_logs_application_id', 'workflow_logs', ['application_id'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_logs (
+            id SERIAL PRIMARY KEY,
+            application_id INTEGER NOT NULL REFERENCES applications(id),
+            changed_by INTEGER NOT NULL REFERENCES users(id),
+            from_main mainstatus,
+            from_sub substatus,
+            to_main mainstatus NOT NULL,
+            to_sub substatus NOT NULL,
+            note TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_workflow_logs_application_id ON workflow_logs(application_id)")
 
     # completion_requirements table
-    op.create_table(
-        'completion_requirements',
-        sa.Column('id',               sa.Integer(), primary_key=True),
-        sa.Column('application_id',   sa.Integer(), sa.ForeignKey('applications.id'), nullable=False),
-        sa.Column('requirement_type', sa.String(),  nullable=False),
-        sa.Column('file_url',         sa.String(),  nullable=True),
-        sa.Column('submitted_at',     sa.DateTime(timezone=True), nullable=True),
-        sa.Column('created_at',       sa.DateTime(timezone=True), server_default=sa.func.now()),
-    )
-    op.create_index('ix_completion_requirements_application_id', 'completion_requirements', ['application_id'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS completion_requirements (
+            id SERIAL PRIMARY KEY,
+            application_id INTEGER NOT NULL REFERENCES applications(id),
+            requirement_type VARCHAR NOT NULL,
+            file_url VARCHAR,
+            submitted_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_completion_requirements_application_id ON completion_requirements(application_id)")
 
 
 def downgrade() -> None:
