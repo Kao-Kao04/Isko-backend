@@ -62,6 +62,13 @@ async def require_osfa(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+async def require_osfa_or_admin(current_user: User = Depends(get_current_user)) -> User:
+    """OSFA staff or super admin — both can manage scholarships and applications."""
+    if current_user.role not in (UserRole.osfa_staff, UserRole.super_admin):
+        raise ForbiddenError("OSFA staff or super admin access required")
+    return current_user
+
+
 async def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.super_admin:
         raise ForbiddenError("Super admin access required")

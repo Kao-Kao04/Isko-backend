@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_osfa
+from app.dependencies import get_current_user, require_osfa_or_admin
 from app.models.user import User
 from app.schemas.document import DocumentResponse, FlagDocsRequest
 from app.services import document_service
@@ -60,8 +60,8 @@ async def delete_document(
 async def flag_documents(
     application_id: int,
     data: FlagDocsRequest,
-    _: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    await document_service.flag_documents(db, application_id, data, _)
+    await document_service.flag_documents(db, application_id, data, current_user)
     return {"message": "Documents flagged"}

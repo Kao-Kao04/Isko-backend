@@ -132,13 +132,21 @@ async def login(db: AsyncSession, data: LoginRequest) -> dict:
     }
 
 
-def refresh_tokens(refresh_token: str) -> dict:
+async def refresh_tokens(db: AsyncSession, refresh_token: str) -> dict:
     try:
         payload = decode_token(refresh_token)
         if payload.get("type") != "refresh":
             raise UnauthorizedError("Invalid token type")
     except JWTError:
         raise UnauthorizedError("Invalid or expired refresh token")
+
+    # Re-validate that the user still exists and is active
+    user_id = int(payload["sub"])
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.is_active == True)
+    )
+    if not result.scalar_one_or_none():
+        raise UnauthorizedError("User not found or account has been deactivated")
 
     token_payload = {"sub": payload["sub"], "role": payload["role"]}
     return {

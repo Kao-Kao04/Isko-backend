@@ -4,9 +4,9 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_osfa, require_verified_student
-from app.models.user import User
-from app.models.application import Application, WorkflowLog
+from app.dependencies import get_current_user, require_osfa_or_admin, require_verified_student
+from app.models.user import User, UserRole
+from app.models.application import Application
 from app.schemas.workflow import (
     ScreeningResultRequest, VerificationResultRequest, RevisionRequest,
     ScheduleInterviewRequest, RescheduleInterviewRequest, CompleteInterviewRequest,
@@ -15,7 +15,7 @@ from app.schemas.workflow import (
     WorkflowStatusResponse, WorkflowLogResponse,
 )
 from app.services import workflow_service
-from app.exceptions import NotFoundError
+from app.exceptions import NotFoundError, ForbiddenError
 
 router = APIRouter(prefix="/api/workflow", tags=["workflow"])
 
@@ -35,6 +35,12 @@ async def _get_app_or_404(db: AsyncSession, application_id: int) -> Application:
     return app
 
 
+def _assert_can_view(app: Application, user: User) -> None:
+    """Students can only view their own application's workflow."""
+    if user.role == UserRole.student and app.student_id != user.id:
+        raise ForbiddenError("You do not have access to this application")
+
+
 # ── Status & Logs ─────────────────────────────────────────────────────────────
 
 @router.get("/{application_id}", response_model=WorkflowStatusResponse)
@@ -44,6 +50,7 @@ async def get_workflow_status(
     db: AsyncSession = Depends(get_db),
 ):
     app = await _get_app_or_404(db, application_id)
+    _assert_can_view(app, current_user)
     return WorkflowStatusResponse(
         application_id=app.id,
         main_status=app.main_status,
@@ -67,9 +74,11 @@ async def get_workflow_status(
 @router.get("/{application_id}/logs", response_model=list[WorkflowLogResponse])
 async def get_logs(
     application_id: int,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    app = await _get_app_or_404(db, application_id)
+    _assert_can_view(app, current_user)
     logs = await workflow_service.get_workflow_logs(db, application_id)
     return [WorkflowLogResponse.model_validate(log) for log in logs]
 
@@ -79,10 +88,10 @@ async def get_logs(
 @router.post("/{application_id}/initialize", status_code=200)
 async def initialize(
     application_id: int,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Initialize workflow for an existing application (OSFA action)."""
+    """Initialize workflow for an existing application (OSFA/admin action)."""
     app = await workflow_service.initialize_workflow(db, application_id, current_user)
     return {"main_status": app.main_status, "sub_status": app.sub_status}
 
@@ -90,7 +99,7 @@ async def initialize(
 @router.post("/{application_id}/screen", status_code=200)
 async def start_screening(
     application_id: int,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.start_screening(db, application_id, current_user)
@@ -101,7 +110,7 @@ async def start_screening(
 async def screening_result(
     application_id: int,
     data: ScreeningResultRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.complete_screening(db, application_id, current_user, data.passed, data.note)
@@ -113,7 +122,7 @@ async def screening_result(
 @router.post("/{application_id}/start-verification", status_code=200)
 async def start_verification(
     application_id: int,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.start_verification(db, application_id, current_user)
@@ -124,7 +133,7 @@ async def start_verification(
 async def request_revision(
     application_id: int,
     data: RevisionRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.request_revision(db, application_id, current_user, data.note)
@@ -135,7 +144,7 @@ async def request_revision(
 async def verification_result(
     application_id: int,
     data: VerificationResultRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.complete_verification(db, application_id, current_user, data.passed, data.note)
@@ -147,7 +156,7 @@ async def verification_result(
 @router.post("/{application_id}/open-scheduling", status_code=200)
 async def open_scheduling(
     application_id: int,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.open_interview_scheduling(db, application_id, current_user)
@@ -161,7 +170,7 @@ async def schedule_interview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Student or OSFA can schedule the interview."""
+    """Student or OSFA/admin can schedule the interview."""
     app = await workflow_service.schedule_interview(
         db, application_id, current_user,
         data.interview_datetime, data.location, data.note,
@@ -189,7 +198,7 @@ async def reschedule_interview(
 async def complete_interview(
     application_id: int,
     data: CompleteInterviewRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.complete_interview(db, application_id, current_user, data.notes)
@@ -200,7 +209,7 @@ async def complete_interview(
 async def evaluate(
     application_id: int,
     data: EvaluationRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.submit_evaluation(db, application_id, current_user, data.eval_score, data.note)
@@ -210,7 +219,7 @@ async def evaluate(
 @router.post("/{application_id}/move-to-review", status_code=200)
 async def move_to_review(
     application_id: int,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.move_to_review(db, application_id, current_user)
@@ -223,7 +232,7 @@ async def move_to_review(
 async def decide(
     application_id: int,
     data: DecisionRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.release_decision(
@@ -256,7 +265,7 @@ async def submit_requirements(
 async def finalize(
     application_id: int,
     data: FinalizeRequest,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.finalize(db, application_id, current_user, data.note)

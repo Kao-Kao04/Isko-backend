@@ -64,11 +64,15 @@ async def login(data: LoginRequest, response: Response, db: AsyncSession = Depen
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(response: Response, refresh_token: str | None = Cookie(default=None)):
+async def refresh(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+):
     from app.exceptions import UnauthorizedError
     if not refresh_token:
         raise UnauthorizedError("No refresh token")
-    tokens = auth_service.refresh_tokens(refresh_token)
+    tokens = await auth_service.refresh_tokens(db, refresh_token)
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
         httponly=True, secure=True, samesite="none", max_age=60 * 60 * 24 * 7,

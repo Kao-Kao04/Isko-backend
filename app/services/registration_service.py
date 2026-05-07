@@ -37,6 +37,19 @@ async def submit_registration(
     if conflict.scalar_one_or_none():
         raise ConflictError("This student number is already registered to another account.")
 
+    # Delete old files from storage before replacing DB records
+    existing_docs = await db.execute(
+        select(RegistrationDocument).where(RegistrationDocument.user_id == user.id)
+    )
+    old_docs = existing_docs.scalars().all()
+    if old_docs:
+        from app.utils.storage import delete_file
+        for old_doc in old_docs:
+            try:
+                await delete_file(old_doc.storage_path)
+            except Exception:
+                pass  # Storage deletion failure should not block re-registration
+
     # Upsert StudentProfile
     result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == user.id))
     profile = result.scalar_one_or_none()
@@ -61,7 +74,7 @@ async def submit_registration(
         )
         db.add(profile)
 
-    # Replace any existing registration documents
+    # Replace registration document records
     await db.execute(
         delete(RegistrationDocument).where(RegistrationDocument.user_id == user.id)
     )
@@ -84,12 +97,15 @@ async def submit_registration(
     user.account_status = AccountStatus.pending_verification
     user.rejection_remarks = None
 
-    # Notify all OSFA staff about the new pending registration
+    # Notify all OSFA staff and super admins about the new pending registration
     full_name = f"{first_name} {last_name}".strip()
-    osfa_result = await db.execute(
-        select(User).where(User.role == UserRole.osfa_staff, User.is_active == True)
+    staff_result = await db.execute(
+        select(User).where(
+            User.role.in_([UserRole.osfa_staff, UserRole.super_admin]),
+            User.is_active == True,
+        )
     )
-    for staff in osfa_result.scalars().all():
+    for staff in staff_result.scalars().all():
         db.add(Notification(
             user_id=staff.id,
             title="New Registration Pending",

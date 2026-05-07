@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_osfa, require_verified_student
+from app.dependencies import get_current_user, require_osfa_or_admin, require_verified_student
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate, ApplicationStatusUpdate, EvalStatusUpdate, EvalScoreUpdate,
@@ -33,7 +33,7 @@ async def count_applications(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _, total = await application_service.list_applications(db, current_user, 1, 1, status)
+    total = await application_service.count_applications(db, current_user, status)
     return {"count": total}
 
 
@@ -77,7 +77,7 @@ async def withdraw_application(
 async def update_status(
     application_id: int,
     data: ApplicationStatusUpdate,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await application_service.update_application_status(db, application_id, data, current_user)
@@ -87,21 +87,20 @@ async def update_status(
 async def update_eval_status(
     application_id: int,
     data: EvalStatusUpdate,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await application_service.update_eval_status(db, application_id, data, current_user)
-
 
 
 @router.patch("/{application_id}/eval-score", response_model=ApplicationResponse)
 async def update_eval_score(
     application_id: int,
     data: EvalScoreUpdate,
-    _: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await application_service.update_eval_score(db, application_id, data)
+    return await application_service.update_eval_score(db, application_id, data, current_user)
 
 
 @router.post("/{application_id}/appeal", response_model=AppealResponse, status_code=201)
@@ -118,7 +117,7 @@ async def file_appeal(
 async def review_appeal(
     application_id: int,
     data: AppealReview,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await application_service.review_appeal(db, application_id, data, current_user)

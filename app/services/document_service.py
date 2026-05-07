@@ -6,12 +6,32 @@ from app.models.document import ApplicationDocument, DocumentStatus
 from app.models.application import Application
 from app.models.scholarship import ScholarshipRequirement
 from app.models.user import UserRole
+from app.models.workflow import SubStatus
 from app.schemas.document import FlagDocsRequest
-from app.utils.storage import upload_file, get_public_url, delete_file
+from app.utils.storage import upload_file, delete_file
 from app.exceptions import NotFoundError, ForbiddenError, ValidationError
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png"}
+
+# Workflow substates where students are allowed to upload or delete documents
+_STUDENT_UPLOAD_ALLOWED_SUBSTATES = {
+    SubStatus.SUBMITTED,
+    SubStatus.SCREENING,
+    SubStatus.SCREENING_PASSED,
+    SubStatus.REVISION_REQUESTED,
+}
+
+
+def _assert_student_can_modify_docs(app: Application) -> None:
+    """Block document changes after verification has started, unless revision was requested."""
+    if app.main_status is None:
+        return  # No workflow yet — allow uploads (pre-workflow)
+    if app.sub_status not in _STUDENT_UPLOAD_ALLOWED_SUBSTATES:
+        raise ValidationError(
+            "Documents can only be uploaded or deleted while your application is in submission "
+            "or revision stage. Contact OSFA if you need to update documents at this stage."
+        )
 
 
 async def upload_document(
@@ -24,6 +44,8 @@ async def upload_document(
         raise NotFoundError("Application", application_id)
     if user.role == UserRole.student and app.student_id != user.id:
         raise ForbiddenError()
+    if user.role == UserRole.student:
+        _assert_student_can_modify_docs(app)
 
     if file.content_type not in ALLOWED_TYPES:
         raise ValidationError("Only PDF, JPG, and PNG files are allowed")
@@ -89,13 +111,15 @@ async def delete_document(db: AsyncSession, application_id: int, doc_id: int, us
     app = app_result.scalar_one_or_none()
     if user.role == UserRole.student and app.student_id != user.id:
         raise ForbiddenError()
+    if user.role == UserRole.student:
+        _assert_student_can_modify_docs(app)
 
     await delete_file(doc.storage_path)
     await db.delete(doc)
     await db.commit()
 
 
-async def flag_documents(db: AsyncSession, application_id: int, data: FlagDocsRequest, staff) -> None:
+async def flag_documents(db: AsyncSession, application_id: int, data: FlagDocsRequest, _staff) -> None:
     await db.execute(
         update(ApplicationDocument)
         .where(

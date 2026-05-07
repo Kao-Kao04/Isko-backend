@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_osfa
+from app.dependencies import get_current_user, require_osfa_or_admin
 from app.models.user import User
 from app.schemas.scholarship import ScholarshipCreate, ScholarshipUpdate, ScholarshipStatusUpdate, ScholarshipResponse
 from app.schemas.common import PaginatedResponse
@@ -26,16 +26,16 @@ async def list_scholarships(
 @router.get("/{scholarship_id}", response_model=ScholarshipResponse)
 async def get_scholarship(
     scholarship_id: int,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholarship_service.get_scholarship(db, scholarship_id)
+    return await scholarship_service.get_scholarship(db, scholarship_id, current_user)
 
 
 @router.post("", response_model=ScholarshipResponse, status_code=201)
 async def create_scholarship(
     data: ScholarshipCreate,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await scholarship_service.create_scholarship(db, data, current_user)
@@ -45,35 +45,35 @@ async def create_scholarship(
 async def update_scholarship(
     scholarship_id: int,
     data: ScholarshipUpdate,
-    _: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholarship_service.update_scholarship(db, scholarship_id, data)
+    return await scholarship_service.update_scholarship(db, scholarship_id, data, current_user)
 
 
 @router.delete("/{scholarship_id}", status_code=204)
 async def delete_scholarship(
     scholarship_id: int,
-    _: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    await scholarship_service.delete_scholarship(db, scholarship_id)
+    await scholarship_service.delete_scholarship(db, scholarship_id, current_user)
 
 
 @router.patch("/{scholarship_id}/status", response_model=ScholarshipResponse)
 async def update_status(
     scholarship_id: int,
     data: ScholarshipStatusUpdate,
-    _: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholarship_service.update_status(db, scholarship_id, data)
+    return await scholarship_service.update_status(db, scholarship_id, data, current_user)
 
 
 @router.post("/{scholarship_id}/duplicate", response_model=ScholarshipResponse, status_code=201)
 async def duplicate_scholarship(
     scholarship_id: int,
-    current_user: User = Depends(require_osfa),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholarship_service.duplicate_scholarship(db, scholarship_id, current_user.id)
+    return await scholarship_service.duplicate_scholarship(db, scholarship_id, current_user)

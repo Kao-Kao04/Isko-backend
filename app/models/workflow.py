@@ -92,8 +92,10 @@ ALLOWED_TRANSITIONS: dict[
         (MainStatus.INTERVIEW, SubStatus.RESCHEDULED),
         (MainStatus.INTERVIEW, SubStatus.INTERVIEW_COMPLETED),
     ],
+    # RESCHEDULED can be rescheduled again or scheduled (to confirm new slot)
     (MainStatus.INTERVIEW, SubStatus.RESCHEDULED): [
         (MainStatus.INTERVIEW, SubStatus.SCHEDULED),
+        (MainStatus.INTERVIEW, SubStatus.RESCHEDULED),
     ],
     (MainStatus.INTERVIEW, SubStatus.INTERVIEW_COMPLETED): [
         (MainStatus.INTERVIEW, SubStatus.EVALUATED),
@@ -116,6 +118,7 @@ ALLOWED_TRANSITIONS: dict[
         (MainStatus.DECISION, SubStatus.APPROVED),
         (MainStatus.DECISION, SubStatus.REJECTED),
     ],
+    # DECISION/REJECTED has no outgoing transitions — treated as terminal by is_terminal()
 
     # COMPLETION stage
     (MainStatus.COMPLETION, SubStatus.PENDING_REQUIREMENTS): [
@@ -124,11 +127,21 @@ ALLOWED_TRANSITIONS: dict[
     (MainStatus.COMPLETION, SubStatus.REQUIREMENTS_SUBMITTED): [
         (MainStatus.COMPLETION, SubStatus.COMPLETED),
     ],
+    # COMPLETION/COMPLETED has no outgoing transitions — treated as terminal by is_terminal()
 }
 
 
-def is_terminal(main: MainStatus) -> bool:
-    return main in (MainStatus.WITHDRAWN, MainStatus.REJECTED)
+def is_terminal(main: MainStatus, sub: SubStatus | None = None) -> bool:
+    """Returns True if the application is in a state that allows no further transitions."""
+    if main in (MainStatus.WITHDRAWN, MainStatus.REJECTED):
+        return True
+    # DECISION/REJECTED is a terminal decision-stage rejection
+    if main == MainStatus.DECISION and sub == SubStatus.REJECTED:
+        return True
+    # COMPLETION/COMPLETED is the final successful terminal state
+    if main == MainStatus.COMPLETION and sub == SubStatus.COMPLETED:
+        return True
+    return False
 
 
 def can_transition(

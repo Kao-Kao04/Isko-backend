@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import require_osfa, require_student
+from app.dependencies import require_osfa_or_admin, require_student
 from app.models.user import User
 from app.schemas.scholar import (
     ScholarResponse, ScholarStatusUpdate,
@@ -27,7 +27,7 @@ async def my_scholars(
 async def list_scholars(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: User = Depends(require_osfa),
+    _: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await scholar_service.list_scholars(db, page, page_size)
@@ -37,7 +37,7 @@ async def list_scholars(
 @router.get("/{scholar_id}", response_model=ScholarResponse)
 async def get_scholar(
     scholar_id: int,
-    _: User = Depends(require_osfa),
+    _: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await scholar_service.get_scholar(db, scholar_id)
@@ -47,7 +47,7 @@ async def get_scholar(
 async def update_status(
     scholar_id: int,
     data: ScholarStatusUpdate,
-    _: User = Depends(require_osfa),
+    _: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await scholar_service.update_scholar_status(db, scholar_id, data)
@@ -57,7 +57,7 @@ async def update_status(
 async def add_semester_record(
     scholar_id: int,
     data: SemesterRecordCreate,
-    _: User = Depends(require_osfa),
+    _: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await scholar_service.add_semester_record(db, scholar_id, data)
@@ -68,7 +68,7 @@ async def update_semester_record(
     scholar_id: int,
     record_id: int,
     data: SemesterRecordUpdate,
-    _: User = Depends(require_osfa),
+    _: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await scholar_service.update_semester_record(db, scholar_id, record_id, data)

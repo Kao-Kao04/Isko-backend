@@ -109,6 +109,9 @@ class ApplicationResponse(BaseModel):
     remarks: str | None
     submitted_at: datetime
     updated_at: datetime
+    # Workflow status — primary source of truth for application stage
+    main_status: str | None = None
+    sub_status: str | None = None
     appeal: AppealResponse | None = None
     student: ApplicationStudentInfo | None = None
     scholarship: ApplicationScholarshipInfo | None = None
