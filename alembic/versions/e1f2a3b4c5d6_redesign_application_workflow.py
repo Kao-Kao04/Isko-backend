@@ -48,26 +48,8 @@ def upgrade() -> None:
     op.add_column('applications', sa.Column('interview_notes',         sa.Text(),   nullable=True))
     op.add_column('applications', sa.Column('decision_remarks',        sa.Text(),   nullable=True))
 
-    # Migrate existing data — cast to enum types explicitly
-    op.execute("""
-        UPDATE applications SET
-            main_status = CASE status::text
-                WHEN 'pending'    THEN 'application'
-                WHEN 'incomplete' THEN 'verification'
-                WHEN 'approved'   THEN 'completion'
-                WHEN 'rejected'   THEN 'rejected'
-                WHEN 'withdrawn'  THEN 'withdrawn'
-                ELSE 'application'
-            END::mainstatus,
-            sub_status = CASE status::text
-                WHEN 'pending'    THEN 'submitted'
-                WHEN 'incomplete' THEN 'revision_requested'
-                WHEN 'approved'   THEN 'completed'
-                WHEN 'rejected'   THEN 'rejected'
-                WHEN 'withdrawn'  THEN 'withdrawn'
-                ELSE 'submitted'
-            END::substatus
-    """)
+    # Existing applications start with NULL main_status/sub_status.
+    # OSFA staff can initialize them via POST /api/workflow/{id}/initialize.
 
     # workflow_logs table
     op.create_table(
