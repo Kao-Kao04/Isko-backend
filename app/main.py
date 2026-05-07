@@ -67,7 +67,7 @@ async def run_migrations(request: Request):
         raise ForbiddenError()
     import subprocess
     result = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        ["alembic", "upgrade", "heads"],
         capture_output=True, text=True, cwd="/app"
     )
     return {
