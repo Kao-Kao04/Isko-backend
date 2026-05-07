@@ -33,10 +33,4 @@ class UserResponse(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    first_name: str | None = None
-    last_name: str | None = None
-    middle_name: str | None = None
-    college: str | None = None
-    program: str | None = None
-    year_level: int | None = None
     gwa: str | None = None
