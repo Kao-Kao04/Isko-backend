@@ -116,12 +116,7 @@ async def login(db: AsyncSession, data: LoginRequest) -> dict:
         from app.utils.storage import get_supabase
         sb = get_supabase()
         try:
-            sb_response = sb.auth.sign_in_with_password({"email": data.email, "password": data.password})
-            # Sync Supabase email confirmation to our DB
-            # Handles case where Supabase "Confirm email" is OFF (auto-confirmed)
-            if sb_response.user and sb_response.user.email_confirmed_at and not user.is_verified:
-                user.is_verified = True
-                await db.commit()
+            sb.auth.sign_in_with_password({"email": data.email, "password": data.password})
         except Exception:
             raise UnauthorizedError("Invalid credentials")
     else:
