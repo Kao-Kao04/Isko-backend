@@ -59,19 +59,3 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/admin/run-migrations")
-async def run_migrations(request: Request):
-    secret = request.headers.get("x-migration-secret", "")
-    if secret != settings.SECRET_KEY:
-        from app.exceptions import ForbiddenError
-        raise ForbiddenError()
-    import subprocess
-    result = subprocess.run(
-        ["alembic", "upgrade", "head"],
-        capture_output=True, text=True, cwd="/app"
-    )
-    return {
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "returncode": result.returncode,
-    }
