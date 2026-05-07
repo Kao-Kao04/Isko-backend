@@ -28,6 +28,9 @@ class SupabaseResetPasswordRequest(BaseModel):
     access_token: str
     new_password: str
 
+class ConfirmEmailTokenRequest(BaseModel):
+    access_token: str
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -136,3 +139,11 @@ async def reset_password_token(data: SupabaseResetPasswordRequest):
         raise ValidationError("Password must be at least 8 characters")
     await auth_service.reset_password_with_supabase_token(data.access_token, data.new_password)
     return {"message": "Password reset successfully. You can now log in."}
+
+
+@router.post("/confirm-email-token", status_code=200)
+async def confirm_email_token(data: ConfirmEmailTokenRequest, db: AsyncSession = Depends(get_db)):
+    email = await auth_service.verify_email_with_token(db, data.access_token)
+    if not email:
+        raise ValidationError("Verification link has expired or is invalid.")
+    return {"message": "Email verified. You can now log in."}

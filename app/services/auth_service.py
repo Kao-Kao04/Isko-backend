@@ -264,6 +264,29 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
         raise ValidationError("Could not update password. Please request a new reset link.")
 
 
+async def verify_email_with_token(db: AsyncSession, access_token: str) -> str | None:
+    """Verify email using the Supabase access_token from the implicit flow hash fragment."""
+    from app.utils.storage import get_supabase
+    sb = get_supabase()
+    try:
+        user_response = sb.auth.get_user(access_token)
+        email = user_response.user.email
+    except Exception as exc:
+        logger.warning("Invalid Supabase access_token for email verification: %s", exc)
+        return None
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+
+    if not user.is_verified:
+        user.is_verified = True
+        await db.commit()
+
+    return email
+
+
 async def reset_password_with_supabase_token(access_token: str, new_password: str) -> None:
     """Reset password using the Supabase access_token from the email link hash."""
     from app.utils.storage import get_supabase
