@@ -48,25 +48,25 @@ def upgrade() -> None:
     op.add_column('applications', sa.Column('interview_notes',         sa.Text(),   nullable=True))
     op.add_column('applications', sa.Column('decision_remarks',        sa.Text(),   nullable=True))
 
-    # Migrate existing data to new workflow columns
+    # Migrate existing data — cast to enum types explicitly
     op.execute("""
         UPDATE applications SET
-            main_status = CASE status
+            main_status = CASE status::text
                 WHEN 'pending'    THEN 'application'
                 WHEN 'incomplete' THEN 'verification'
                 WHEN 'approved'   THEN 'completion'
                 WHEN 'rejected'   THEN 'rejected'
                 WHEN 'withdrawn'  THEN 'withdrawn'
                 ELSE 'application'
-            END,
-            sub_status = CASE status
+            END::mainstatus,
+            sub_status = CASE status::text
                 WHEN 'pending'    THEN 'submitted'
                 WHEN 'incomplete' THEN 'revision_requested'
                 WHEN 'approved'   THEN 'completed'
                 WHEN 'rejected'   THEN 'rejected'
                 WHEN 'withdrawn'  THEN 'withdrawn'
                 ELSE 'submitted'
-            END
+            END::substatus
     """)
 
     # workflow_logs table
