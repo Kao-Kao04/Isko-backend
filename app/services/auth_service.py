@@ -56,7 +56,7 @@ async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
             "email": data.email,
             "password": data.password,
             "options": {
-                "email_redirect_to": f"{settings.BACKEND_URL}/api/auth/verify-email",
+                "email_redirect_to": f"{settings.FRONTEND_URL}/verify-email",
             },
         })
     except Exception as exc:
