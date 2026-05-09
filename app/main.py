@@ -1,3 +1,6 @@
+import logging
+import logging.config
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,7 +12,44 @@ from app.config import settings
 from app.limiter import limiter
 from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws, workflow
 
-app = FastAPI(title="IskoMo API", version="1.0.0")
+# ── Structured logging ───────────────────────────────────────────────────────
+LOG_LEVEL = "INFO" if settings.ENVIRONMENT == "production" else "DEBUG"
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "format": '{"time":"%(asctime)s","level":"%(levelname)s","name":"%(name)s","message":"%(message)s"}',
+        },
+        "dev": {
+            "format": "%(levelname)s %(name)s: %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json" if settings.ENVIRONMENT == "production" else "dev",
+        },
+    },
+    "root": {"level": LOG_LEVEL, "handlers": ["console"]},
+    "loggers": {
+        "uvicorn.access": {"level": "WARNING"},
+        "sqlalchemy.engine": {"level": "WARNING"},
+    },
+})
+
+logger = logging.getLogger(__name__)
+
+# ── App ───────────────────────────────────────────────────────────────────────
+_docs_url    = None if settings.ENVIRONMENT == "production" else "/docs"
+_redoc_url   = None if settings.ENVIRONMENT == "production" else "/redoc"
+
+app = FastAPI(
+    title="IskoMo API",
+    version="1.0.0",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -22,6 +62,7 @@ app.add_middleware(
 )
 
 
+# ── Exception handlers ────────────────────────────────────────────────────────
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -35,11 +76,13 @@ async def generic_exception_handler(request: Request, exc: Exception):
     from app.exceptions import AppException
     if isinstance(exc, AppException):
         return JSONResponse(status_code=exc.status_code, content=exc.detail)
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     if settings.ENVIRONMENT == "production":
         return JSONResponse(status_code=500, content={"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"})
     raise exc
 
 
+# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(registration.router)
@@ -54,8 +97,15 @@ app.include_router(workflow.router)
 app.include_router(ws.router)
 
 
+# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
-
-
+    from sqlalchemy import text
+    from app.database import AsyncSessionLocal
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception as exc:
+        logger.error("Health check failed: %s", exc)
+        return JSONResponse(status_code=503, content={"status": "degraded", "detail": str(exc)})

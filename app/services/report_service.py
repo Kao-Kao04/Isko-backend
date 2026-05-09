@@ -4,12 +4,12 @@ from sqlalchemy import select, func, case
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import Scholarship
 from app.models.scholar import Scholar
-from app.models.user import User
+from app.models.user import User, UserRole
 
 
 async def get_overview(db: AsyncSession, current_user: User) -> dict:
     applications_q = select(Application.status, func.count(Application.id).label("count"))
-    if current_user.role == "osfa_staff" and current_user.department:
+    if current_user.role == UserRole.osfa_staff and current_user.department:
         applications_q = (
             applications_q
             .join(Scholarship, Application.scholarship_id == Scholarship.id)
@@ -22,7 +22,7 @@ async def get_overview(db: AsyncSession, current_user: User) -> dict:
     total_scholars = await db.execute(select(func.count(Scholar.id)))
 
     active_scholarships_q = select(func.count(Scholarship.id)).where(Scholarship.status == "active")
-    if current_user.role == "osfa_staff" and current_user.department:
+    if current_user.role == UserRole.osfa_staff and current_user.department:
         active_scholarships_q = active_scholarships_q.where(
             Scholarship.category == current_user.department.value
         )
@@ -49,7 +49,7 @@ async def get_scholarship_breakdown(db: AsyncSession, current_user: User) -> lis
         .outerjoin(Application, Application.scholarship_id == Scholarship.id)
         .group_by(Scholarship.id, Scholarship.name, Scholarship.slots)
     )
-    if current_user.role == "osfa_staff" and current_user.department:
+    if current_user.role == UserRole.osfa_staff and current_user.department:
         q = q.where(Scholarship.category == current_user.department.value)
     result = await db.execute(q)
     return [row._asdict() for row in result]
@@ -65,7 +65,7 @@ async def get_application_trends(db: AsyncSession, current_user: User) -> list:
         .group_by("date", Application.status)
         .order_by("date")
     )
-    if current_user.role == "osfa_staff" and current_user.department:
+    if current_user.role == UserRole.osfa_staff and current_user.department:
         q = (
             q.join(Scholarship, Application.scholarship_id == Scholarship.id)
             .where(Scholarship.category == current_user.department.value)

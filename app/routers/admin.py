@@ -1,6 +1,6 @@
 import csv
 import io
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from app.models.audit import AuditEntry
 from app.models.notification import Notification
 from app.schemas.admin import StaffCreate, StaffUpdate, StaffResponse
 from app.utils.security import hash_password
+from app.exceptions import ConflictError, NotFoundError, ValidationError
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -54,7 +55,7 @@ async def create_staff(
 ):
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise ConflictError("Email already registered")
     user = User(
         email=data.email,
         hashed_password=hash_password(data.password),
@@ -86,7 +87,7 @@ async def update_staff(
     )
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise NotFoundError("Staff", staff_id)
     if data.department is not None:
         user.department = DepartmentEnum(data.department)
     if data.is_active is not None:
@@ -111,7 +112,7 @@ async def delete_staff(
     )
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise NotFoundError("Staff", staff_id)
     await db.delete(user)
     await db.commit()
 
@@ -124,13 +125,13 @@ async def reset_staff_password(
     _: User = Depends(require_super_admin),
 ):
     if len(data.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        raise ValidationError("Password must be at least 8 characters")
     result = await db.execute(
         select(User).where(User.id == staff_id, User.role == UserRole.osfa_staff)
     )
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise NotFoundError("Staff", staff_id)
     user.hashed_password = hash_password(data.new_password)
     await db.commit()
     return {"message": "Password reset successfully"}

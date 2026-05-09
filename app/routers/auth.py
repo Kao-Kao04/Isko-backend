@@ -36,7 +36,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/signup", status_code=200)
-async def signup(data: SignUpRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depends(get_db)):
     result = await auth_service.signup(db, data)
     if result.get("dev"):
         return {"message": "Dev mode: email auto-verified. You can now log in."}
@@ -56,7 +57,8 @@ async def verify_email(code: str | None = None, db: AsyncSession = Depends(get_d
 
 
 @router.post("/login")
-async def login(data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     tokens = await auth_service.login(db, data)
     max_age = 60 * 60 * 24 * 30 if data.remember_me else None  # 30 days or session cookie
     response.set_cookie(

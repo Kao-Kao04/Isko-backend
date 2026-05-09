@@ -25,7 +25,9 @@ class Scholar(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    application = relationship("Application", back_populates="scholar")
+    application  = relationship("Application", back_populates="scholar")
+    user         = relationship("User",         foreign_keys=[student_id])
+    scholarship  = relationship("Scholarship",  foreign_keys=[scholarship_id])
     semester_records = relationship("SemesterRecord", back_populates="scholar", cascade="all, delete-orphan")
 
 

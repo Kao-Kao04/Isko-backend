@@ -21,12 +21,14 @@ def get_supabase():
 
 
 async def upload_file(file_bytes: bytes, original_filename: str, content_type: str) -> str:
+    import asyncio
     ext = original_filename.rsplit(".", 1)[-1] if "." in original_filename else "bin"
     path = f"{uuid.uuid4()}.{ext}"
     try:
         sb = get_supabase()
-        sb.storage.from_(settings.SUPABASE_BUCKET).upload(
-            path, file_bytes, {"content-type": content_type}
+        await asyncio.to_thread(
+            sb.storage.from_(settings.SUPABASE_BUCKET).upload,
+            path, file_bytes, {"content-type": content_type},
         )
         return path
     except Exception as exc:
