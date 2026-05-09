@@ -1,9 +1,21 @@
 from pydantic import BaseModel, EmailStr, field_validator
 
+ALLOWED_DOMAINS = {"iskolarngbayan.pup.edu.ph", "gmail.com"}
+
 
 class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def email_domain(cls, v: str) -> str:
+        domain = v.split("@")[-1].lower()
+        if domain not in ALLOWED_DOMAINS:
+            raise ValueError(
+                "Only @iskolarngbayan.pup.edu.ph and @gmail.com email addresses are allowed."
+            )
+        return v
 
     @field_validator("password")
     @classmethod
