@@ -19,13 +19,19 @@ async def get_current_user(
 ) -> User:
     if not credentials:
         raise UnauthorizedError()
+    token = credentials.credentials
     try:
-        payload = decode_token(credentials.credentials)
+        payload = decode_token(token)
         if payload.get("type") != "access":
             raise UnauthorizedError("Invalid token type")
         user_id: int = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise UnauthorizedError("Invalid or expired token")
+
+    from app.token_blacklist import is_revoked
+    import hashlib
+    if is_revoked(hashlib.sha256(token.encode()).hexdigest()):
+        raise UnauthorizedError("Token has been revoked")
 
     result = await db.execute(
         select(User)

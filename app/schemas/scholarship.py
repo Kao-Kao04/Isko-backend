@@ -1,7 +1,26 @@
-from pydantic import BaseModel
+import re
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 from typing import List
 from app.models.scholarship import ScholarshipStatus
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+def _strip_html(v: str | None) -> str | None:
+    if v is None:
+        return v
+    return _TAG_RE.sub("", v).strip()
+
+def _safe_url(v: str | None) -> str | None:
+    if v is None:
+        return v
+    if not v.startswith(("https://", "http://")):
+        return None
+    # Block internal/localhost URLs to prevent SSRF
+    blocked = ("localhost", "127.", "0.0.0.0", "169.254.", "10.", "192.168.", "::1")
+    if any(b in v.lower() for b in blocked):
+        return None
+    return v
 
 
 class RequirementCreate(BaseModel):
@@ -36,6 +55,18 @@ class ScholarshipCreate(BaseModel):
     category: str | None = None
     requirements: List[RequirementCreate] = []
 
+    @field_validator("name", "scholarship_type", "period", mode="before")
+    @classmethod
+    def sanitize_text(cls, v):           return _strip_html(v)
+
+    @field_validator("description", "eligibility_text", mode="before")
+    @classmethod
+    def sanitize_long_text(cls, v):      return _strip_html(v)
+
+    @field_validator("cover_image_url", mode="before")
+    @classmethod
+    def validate_url(cls, v):            return _safe_url(v)
+
 
 class ScholarshipUpdate(BaseModel):
     name: str | None = None
@@ -53,6 +84,18 @@ class ScholarshipUpdate(BaseModel):
     cover_image_url: str | None = None
     category: str | None = None
     requirements: List[RequirementCreate] | None = None
+
+    @field_validator("name", "scholarship_type", "period", mode="before")
+    @classmethod
+    def sanitize_text(cls, v):           return _strip_html(v)
+
+    @field_validator("description", "eligibility_text", mode="before")
+    @classmethod
+    def sanitize_long_text(cls, v):      return _strip_html(v)
+
+    @field_validator("cover_image_url", mode="before")
+    @classmethod
+    def validate_url(cls, v):            return _safe_url(v)
 
 
 class ScholarshipStatusUpdate(BaseModel):

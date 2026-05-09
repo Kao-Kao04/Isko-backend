@@ -46,6 +46,23 @@ def get_public_url(path: str) -> str:
         return ""
 
 
+async def get_signed_url(path: str, expires_in: int = 3600) -> str:
+    """Generate a time-limited signed URL for private bucket access."""
+    if not path:
+        return ""
+    try:
+        import asyncio
+        sb = get_supabase()
+        result = await asyncio.to_thread(
+            sb.storage.from_(settings.SUPABASE_BUCKET).create_signed_url,
+            path, expires_in,
+        )
+        return result.get("signedURL") or result.get("signed_url") or ""
+    except Exception as exc:
+        logger.error("Failed to create signed URL for %s: %s", path, exc)
+        return ""
+
+
 async def delete_file(path: str) -> None:
     if not path:
         return

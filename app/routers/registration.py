@@ -1,11 +1,11 @@
+import asyncio
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_student
 from app.models.user import User
-from app.models.registration import RegistrationDocType
-from app.utils.storage import upload_file, get_public_url
+from app.utils.storage import upload_file, get_signed_url
 from app.services import registration_service
 from app.exceptions import ForbiddenError
 
@@ -18,15 +18,6 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 def _validate_file(file: UploadFile) -> None:
     if file.content_type not in ALLOWED_TYPES:
         raise ForbiddenError("Only PDF, JPEG, or PNG files are accepted")
-
-
-class RegistrationDocumentOut:
-    def __init__(self, doc):
-        self.id = doc.id
-        self.doc_type = doc.doc_type
-        self.filename = doc.filename
-        self.url = get_public_url(doc.storage_path)
-        self.uploaded_at = doc.uploaded_at
 
 
 @router.post("/submit", status_code=200)
@@ -82,13 +73,14 @@ async def my_registration_documents(
     db: AsyncSession = Depends(get_db),
 ):
     docs = await registration_service.get_registration_documents(db, current_user.id)
+    urls = await asyncio.gather(*[get_signed_url(d.storage_path) for d in docs])
     return [
         {
             "id": d.id,
             "doc_type": d.doc_type,
             "filename": d.filename,
-            "url": get_public_url(d.storage_path),
+            "url": url,
             "uploaded_at": d.uploaded_at,
         }
-        for d in docs
+        for d, url in zip(docs, urls)
     ]

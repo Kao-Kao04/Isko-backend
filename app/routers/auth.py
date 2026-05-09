@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, Response, Cookie, Request
 from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
 from app.dependencies import get_current_user
+
+bearer = HTTPBearer(auto_error=False)
 from app.schemas.auth import SignUpRequest, LoginRequest, TokenResponse
 from app.schemas.user import UserResponse
 from app.services import auth_service
@@ -86,8 +89,15 @@ async def refresh(
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    response.delete_cookie("refresh_token")
+async def logout(
+    response: Response,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+):
+    if credentials:
+        import hashlib
+        from app.token_blacklist import revoke
+        revoke(hashlib.sha256(credentials.credentials.encode()).hexdigest())
+    response.delete_cookie("refresh_token", samesite="none", secure=True)
     return {"message": "Logged out"}
 
 

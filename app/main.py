@@ -41,14 +41,17 @@ logging.config.dictConfig({
 logger = logging.getLogger(__name__)
 
 # ── App ───────────────────────────────────────────────────────────────────────
-_docs_url    = None if settings.ENVIRONMENT == "production" else "/docs"
-_redoc_url   = None if settings.ENVIRONMENT == "production" else "/redoc"
+_is_prod     = settings.ENVIRONMENT == "production"
+_docs_url    = None if _is_prod else "/docs"
+_redoc_url   = None if _is_prod else "/redoc"
+_openapi_url = None if _is_prod else "/openapi.json"
 
 app = FastAPI(
     title="IskoMo API",
     version="1.0.0",
     docs_url=_docs_url,
     redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -60,6 +63,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if settings.ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 # ── Exception handlers ────────────────────────────────────────────────────────

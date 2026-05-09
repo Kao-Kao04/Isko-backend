@@ -11,7 +11,8 @@ from app.models.registration import RegistrationDocument
 from app.schemas.user import UserResponse, UpdateProfileRequest
 from app.schemas.common import PaginatedResponse
 from app.utils.pagination import paginate
-from app.utils.storage import get_public_url
+import asyncio
+from app.utils.storage import get_signed_url
 from app.exceptions import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -99,15 +100,16 @@ async def get_registration_documents(
         select(RegistrationDocument).where(RegistrationDocument.user_id == user_id)
     )
     docs = result.scalars().all()
+    urls = await asyncio.gather(*[get_signed_url(d.storage_path) for d in docs])
     return [
         {
             "id": d.id,
             "doc_type": d.doc_type,
             "filename": d.filename,
-            "url": get_public_url(d.storage_path),
+            "url": url,
             "uploaded_at": d.uploaded_at,
         }
-        for d in docs
+        for d, url in zip(docs, urls)
     ]
 
 

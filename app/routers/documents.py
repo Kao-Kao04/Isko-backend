@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,19 +7,17 @@ from app.dependencies import get_current_user, require_osfa_or_admin
 from app.models.user import User
 from app.schemas.document import DocumentResponse, FlagDocsRequest
 from app.services import document_service
-from app.utils.storage import get_public_url
+from app.utils.storage import get_signed_url
 
 router = APIRouter(prefix="/api/applications/{application_id}/documents", tags=["documents"])
 
 
-def _enrich(doc) -> DocumentResponse:
+async def _enrich(doc) -> DocumentResponse:
     resp = DocumentResponse.model_validate(doc)
-    resp.url = get_public_url(doc.storage_path)
-    resp.file_url = resp.url
-    if doc.requirement and doc.requirement.name:
-        resp.requirement_name = doc.requirement.name
-    else:
-        resp.requirement_name = doc.filename
+    url = await get_signed_url(doc.storage_path)
+    resp.url = url
+    resp.file_url = url
+    resp.requirement_name = (doc.requirement.name if doc.requirement and doc.requirement.name else doc.filename)
     resp.file_name = doc.filename
     resp.flagged = doc.status == "flagged"
     return resp
@@ -33,7 +32,7 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
 ):
     doc = await document_service.upload_document(db, application_id, file, current_user, requirement_name)
-    return _enrich(doc)
+    return await _enrich(doc)
 
 
 @router.get("", response_model=list[DocumentResponse])
@@ -43,7 +42,7 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
 ):
     docs = await document_service.list_documents(db, application_id, current_user)
-    return [_enrich(d) for d in docs]
+    return await asyncio.gather(*[_enrich(d) for d in docs])
 
 
 @router.delete("/{doc_id}", status_code=204)
