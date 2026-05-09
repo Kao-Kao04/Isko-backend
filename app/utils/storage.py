@@ -1,5 +1,9 @@
+import logging
 import uuid
+from fastapi import HTTPException
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _supabase_client = None
 
@@ -19,11 +23,15 @@ def get_supabase():
 async def upload_file(file_bytes: bytes, original_filename: str, content_type: str) -> str:
     ext = original_filename.rsplit(".", 1)[-1] if "." in original_filename else "bin"
     path = f"{uuid.uuid4()}.{ext}"
-    sb = get_supabase()
-    sb.storage.from_(settings.SUPABASE_BUCKET).upload(
-        path, file_bytes, {"content-type": content_type}
-    )
-    return path
+    try:
+        sb = get_supabase()
+        sb.storage.from_(settings.SUPABASE_BUCKET).upload(
+            path, file_bytes, {"content-type": content_type}
+        )
+        return path
+    except Exception as exc:
+        logger.error("Storage upload failed for %s: %s", original_filename, exc)
+        raise HTTPException(status_code=503, detail=f"File upload failed: {exc}")
 
 
 def get_public_url(path: str) -> str:
