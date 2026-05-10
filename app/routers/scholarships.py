@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/scholarships", tags=["scholarships"])
 @router.get("", response_model=PaginatedResponse[ScholarshipResponse])
 async def list_scholarships(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=500),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

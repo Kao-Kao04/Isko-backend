@@ -121,16 +121,21 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
         raise ValidationError("Your student profile is incomplete. Please complete registration before applying.")
     _check_eligibility(scholarship, student.student_profile)
 
-    # Slot enforcement
+    # Slot enforcement — lock scholarship row to prevent race condition
     if scholarship.slots is not None:
-        slot_count = await db.execute(
-            select(func.count(Application.id)).where(
-                Application.scholarship_id == data.scholarship_id,
-                Application.status.notin_([ApplicationStatus.withdrawn]),
-            )
+        locked = await db.execute(
+            select(Scholarship).where(Scholarship.id == data.scholarship_id).with_for_update()
         )
-        if slot_count.scalar() >= scholarship.slots:
-            raise ValidationError("This scholarship has no available slots")
+        locked_sch = locked.scalar_one_or_none()
+        if locked_sch and locked_sch.slots is not None:
+            slot_count = await db.execute(
+                select(func.count(Application.id)).where(
+                    Application.scholarship_id == data.scholarship_id,
+                    Application.status.notin_([ApplicationStatus.withdrawn]),
+                )
+            )
+            if slot_count.scalar() >= locked_sch.slots:
+                raise ValidationError("This scholarship has no available slots")
 
     existing = await db.execute(
         select(Application).where(

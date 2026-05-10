@@ -291,6 +291,7 @@ async def broadcast_notification(
 @router.get("/reports/export")
 async def export_report(
     type: str = Query("students", pattern="^(students|applications|scholars)$"),
+    limit: int = Query(5000, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_super_admin),
 ):
@@ -303,7 +304,7 @@ async def export_report(
         writer.writerow(["ID", "Email", "Student Number", "First Name", "Last Name", "College", "Program", "Year Level", "GWA", "Account Status", "Registered At"])
         users = (await db.execute(
             select(User).options(selectinload(User.student_profile))
-            .where(User.role == UserRole.student).order_by(User.created_at.desc())
+            .where(User.role == UserRole.student).order_by(User.created_at.desc()).limit(limit)
         )).scalars().all()
         for u in users:
             p = u.student_profile
@@ -320,7 +321,7 @@ async def export_report(
         apps = (await db.execute(
             select(Application)
             .options(selectinload(Application.student).selectinload(User.student_profile), selectinload(Application.scholarship))
-            .order_by(Application.submitted_at.desc())
+            .order_by(Application.submitted_at.desc()).limit(limit)
         )).scalars().all()
         for a in apps:
             p = a.student.student_profile if a.student else None
@@ -337,7 +338,7 @@ async def export_report(
         scholars = (await db.execute(
             select(Scholar)
             .options(selectinload(Scholar.user).selectinload(User.student_profile), selectinload(Scholar.scholarship))
-            .order_by(Scholar.created_at.desc())
+            .order_by(Scholar.created_at.desc()).limit(limit)
         )).scalars().all()
         for s in scholars:
             p = s.user.student_profile if s.user else None

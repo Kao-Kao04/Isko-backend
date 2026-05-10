@@ -1,6 +1,6 @@
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 
 from app.models.document import ApplicationDocument, DocumentStatus
 from app.models.application import Application
@@ -13,6 +13,7 @@ from app.exceptions import NotFoundError, ForbiddenError, ValidationError
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png"}
+MAX_DOCS_PER_APPLICATION = 20
 
 # Workflow substates where students are allowed to upload or delete documents
 _STUDENT_UPLOAD_ALLOWED_SUBSTATES = {
@@ -49,6 +50,13 @@ async def upload_document(
 
     if file.content_type not in ALLOWED_TYPES:
         raise ValidationError("Only PDF, JPG, and PNG files are allowed")
+
+    doc_count = (await db.execute(
+        select(func.count(ApplicationDocument.id))
+        .where(ApplicationDocument.application_id == application_id)
+    )).scalar()
+    if doc_count >= MAX_DOCS_PER_APPLICATION:
+        raise ValidationError(f"Maximum {MAX_DOCS_PER_APPLICATION} documents per application")
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:

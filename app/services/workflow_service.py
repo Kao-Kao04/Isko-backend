@@ -70,6 +70,15 @@ def _assert_student_owns(app: Application, actor: User) -> None:
         raise ForbiddenError("You do not have access to this application")
 
 
+def _assert_dept(app: Application, actor: User) -> None:
+    """OSFA staff may only act on applications for their department's scholarships."""
+    if actor.role == UserRole.osfa_staff and actor.department and app.scholarship:
+        if app.scholarship.category != actor.department:
+            raise ForbiddenError(
+                "You can only manage applications for your department's scholarships"
+            )
+
+
 def _queue_notification(
     db: AsyncSession, user_id: int, title: str, body: str, application_id: int
 ) -> Notification:
@@ -135,6 +144,7 @@ async def initialize_workflow(db: AsyncSession, application_id: int, actor: User
 
 async def start_screening(db: AsyncSession, application_id: int, actor: User) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     await _apply(db, app, actor, MainStatus.APPLICATION, SubStatus.SCREENING)
     app.screened_at = _now()
     return await _commit_and_notify(db, app)
@@ -144,6 +154,7 @@ async def complete_screening(
     db: AsyncSession, application_id: int, actor: User, passed: bool, note: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if passed:
         await _apply(db, app, actor, MainStatus.APPLICATION, SubStatus.SCREENING_PASSED, note)
         return await _commit_and_notify(db, app)
@@ -162,6 +173,7 @@ async def complete_screening(
 
 async def start_verification(db: AsyncSession, application_id: int, actor: User) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     await _apply(db, app, actor, MainStatus.VERIFICATION, SubStatus.PENDING_VALIDATION)
     notif = _queue_notification(
         db, app.student_id,
@@ -176,6 +188,7 @@ async def request_revision(
     db: AsyncSession, application_id: int, actor: User, note: str
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     await _apply(db, app, actor, MainStatus.VERIFICATION, SubStatus.REVISION_REQUESTED, note)
     from app.models.application import ApplicationStatus
     app.status = ApplicationStatus.incomplete
@@ -192,6 +205,7 @@ async def complete_verification(
     db: AsyncSession, application_id: int, actor: User, passed: bool, note: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if passed:
         await _apply(db, app, actor, MainStatus.VERIFICATION, SubStatus.VALIDATED, note)
         app.validated_at = _now()
@@ -219,6 +233,7 @@ async def complete_verification(
 
 async def open_interview_scheduling(db: AsyncSession, application_id: int, actor: User) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.NOT_SCHEDULED)
     notif = _queue_notification(
         db, app.student_id,
@@ -242,6 +257,9 @@ async def schedule_interview(
 
     if app.sub_status not in (SubStatus.NOT_SCHEDULED, SubStatus.RESCHEDULED):
         raise ValidationError(f"Cannot schedule interview from state {app.sub_status}")
+
+    if interview_datetime <= _now():
+        raise ValidationError("Interview must be scheduled for a future date and time")
 
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.SCHEDULED, note)
     app.interview_datetime = interview_datetime
@@ -279,6 +297,7 @@ async def complete_interview(
     db: AsyncSession, application_id: int, actor: User, notes: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if not app.interview_datetime:
         raise ValidationError("Cannot complete interview — no interview schedule exists.")
     if app.sub_status != SubStatus.SCHEDULED:
@@ -298,6 +317,7 @@ async def submit_evaluation(
     note: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if app.sub_status != SubStatus.INTERVIEW_COMPLETED:
         raise ValidationError("Cannot evaluate before interview is completed.")
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.EVALUATED, note)
@@ -309,6 +329,7 @@ async def submit_evaluation(
 
 async def move_to_review(db: AsyncSession, application_id: int, actor: User) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if app.sub_status != SubStatus.EVALUATED:
         raise ValidationError("Cannot move to review — evaluation not yet submitted.")
     await _apply(db, app, actor, MainStatus.DECISION, SubStatus.UNDER_REVIEW)
@@ -323,6 +344,7 @@ async def release_decision(
     remarks: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
 
     decision_map = {
         "approved":   SubStatus.APPROVED,
@@ -413,6 +435,7 @@ async def finalize(
     db: AsyncSession, application_id: int, actor: User, note: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if app.sub_status != SubStatus.REQUIREMENTS_SUBMITTED:
         raise ValidationError("Requirements must be submitted before finalizing.")
     await _apply(db, app, actor, MainStatus.COMPLETION, SubStatus.COMPLETED, note)

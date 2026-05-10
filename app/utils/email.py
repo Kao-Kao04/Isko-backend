@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import resend
 
@@ -6,14 +7,14 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _send(to_email: str, subject: str, html: str) -> None:
+async def _send(to_email: str, subject: str, html: str) -> None:
     if not settings.RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not set — email to %s skipped. Subject: %s", to_email, subject)
         return
 
     resend.api_key = settings.RESEND_API_KEY
     try:
-        resend.Emails.send({
+        await asyncio.to_thread(resend.Emails.send, {
             "from": settings.RESEND_FROM or "IskoMo <onboarding@resend.dev>",
             "to": [to_email],
             "subject": subject,
@@ -24,9 +25,9 @@ def _send(to_email: str, subject: str, html: str) -> None:
         raise RuntimeError("Could not send email. Please try again later.") from exc
 
 
-def send_reset_email(to_email: str, reset_url: str) -> None:
+async def send_reset_email(to_email: str, reset_url: str) -> None:
     logger.info("Password reset link for %s: %s", to_email, reset_url)
-    _send(
+    await _send(
         to_email=to_email,
         subject="Reset your IskoMo password",
         html=f"""
@@ -46,10 +47,10 @@ def send_reset_email(to_email: str, reset_url: str) -> None:
     )
 
 
-def send_verification_email(to_email: str, token: str) -> None:
+async def send_verification_email(to_email: str, token: str) -> None:
     verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
     logger.info("Verification link for %s: %s", to_email, verification_url)
-    _send(
+    await _send(
         to_email=to_email,
         subject="Verify your IskoMo email",
         html=f"""
