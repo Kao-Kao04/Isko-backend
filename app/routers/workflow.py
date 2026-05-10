@@ -264,7 +264,7 @@ async def submit_requirements(
 @router.post("/{application_id}/finalize", status_code=200)
 async def finalize(
     application_id: int,
-    data: FinalizeRequest,
+    data: FinalizeRequest = Body(default=FinalizeRequest()),
     current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
