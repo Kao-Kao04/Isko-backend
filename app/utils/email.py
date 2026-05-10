@@ -47,6 +47,60 @@ async def send_reset_email(to_email: str, reset_url: str) -> None:
     )
 
 
+async def send_application_status_email(to_email: str, scholarship_name: str, status: str, remarks: str | None = None) -> None:
+    if status == "rejected":
+        subject = f"Application for {scholarship_name} — Not Approved"
+        body_line = "Unfortunately, your application was not approved."
+    elif status == "incomplete":
+        subject = f"Action Required: Application for {scholarship_name}"
+        body_line = "Your application requires additional documents or corrections before it can be reviewed."
+    else:
+        return  # approved notifications are celebratory — keep in-app only for now
+
+    remarks_block = (
+        f'<p style="margin-top:12px;"><strong>Remarks:</strong> {remarks}</p>'
+        if remarks else ""
+    )
+    await _send(
+        to_email=to_email,
+        subject=subject,
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">IskoMo Scholarship Update</h2>
+            <p>{body_line}</p>
+            <p><strong>Scholarship:</strong> {scholarship_name}</p>
+            {remarks_block}
+            <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+                Log in to <a href="{settings.FRONTEND_URL}">IskoMo</a> to view your application details.
+            </p>
+        </div>
+        """,
+    )
+
+
+async def send_scholar_terminated_email(to_email: str, reason: str | None = None) -> None:
+    reason_block = (
+        f'<p style="margin-top:12px;"><strong>Reason:</strong> {reason}</p>'
+        if reason else ""
+    )
+    await _send(
+        to_email=to_email,
+        subject="Important: Your IskoMo Scholarship Has Been Terminated",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">Scholarship Termination Notice</h2>
+            <p>Your scholarship has been terminated by the Office of Student Financial Assistance (OSFA).</p>
+            {reason_block}
+            <p>If you believe this is in error or would like to file an appeal, please contact the OSFA directly
+               or log in to <a href="{settings.FRONTEND_URL}">IskoMo</a> to submit an appeal.</p>
+            <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+                Polytechnic University of the Philippines — OSFA
+            </p>
+        </div>
+        """,
+    )
+
+
 async def send_verification_email(to_email: str, token: str) -> None:
     verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
     logger.info("Verification link for %s: %s", to_email, verification_url)

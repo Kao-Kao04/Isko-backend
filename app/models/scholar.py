@@ -8,8 +8,34 @@ from app.database import Base
 class ScholarStatus(str, enum.Enum):
     active = "active"
     probationary = "probationary"
+    under_review = "under_review"   # flagged for policy concern, pending OSFA decision
+    on_leave = "on_leave"           # approved temporary suspension (medical, LOA)
+    suspended = "suspended"         # university-imposed suspension
     terminated = "terminated"
     graduated = "graduated"
+
+
+# Terminal states — no further transitions allowed
+_TERMINAL = {ScholarStatus.terminated, ScholarStatus.graduated}
+
+SCHOLAR_STATUS_TRANSITIONS: dict[ScholarStatus, list[ScholarStatus]] = {
+    ScholarStatus.active: [
+        ScholarStatus.probationary, ScholarStatus.under_review,
+        ScholarStatus.on_leave, ScholarStatus.terminated, ScholarStatus.graduated,
+    ],
+    ScholarStatus.probationary: [
+        ScholarStatus.active, ScholarStatus.under_review,
+        ScholarStatus.on_leave, ScholarStatus.terminated,
+    ],
+    ScholarStatus.under_review: [
+        ScholarStatus.active, ScholarStatus.probationary,
+        ScholarStatus.on_leave, ScholarStatus.terminated,
+    ],
+    ScholarStatus.on_leave: [ScholarStatus.active, ScholarStatus.terminated],
+    ScholarStatus.suspended: [ScholarStatus.active, ScholarStatus.terminated],
+    ScholarStatus.terminated: [],
+    ScholarStatus.graduated: [],
+}
 
 
 class Scholar(Base):
@@ -29,6 +55,7 @@ class Scholar(Base):
     user         = relationship("User",         foreign_keys=[student_id])
     scholarship  = relationship("Scholarship",  foreign_keys=[scholarship_id])
     semester_records = relationship("SemesterRecord", back_populates="scholar", cascade="all, delete-orphan")
+    status_logs      = relationship("ScholarStatusLog", back_populates="scholar", order_by="ScholarStatusLog.created_at")
 
 
 class SemesterRecord(Base):
@@ -45,3 +72,19 @@ class SemesterRecord(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     scholar = relationship("Scholar", back_populates="semester_records")
+
+
+class ScholarStatusLog(Base):
+    """Immutable audit trail for every Scholar.status transition."""
+    __tablename__ = "scholar_status_logs"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    scholar_id  = Column(Integer, ForeignKey("scholars.id"), nullable=False, index=True)
+    from_status = Column(SAEnum(ScholarStatus), nullable=True)
+    to_status   = Column(SAEnum(ScholarStatus), nullable=False)
+    actor_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reason      = Column(Text, nullable=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    scholar = relationship("Scholar", back_populates="status_logs")
+    actor   = relationship("User", foreign_keys=[actor_id])

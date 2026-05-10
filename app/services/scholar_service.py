@@ -1,9 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-
-from app.models.scholar import Scholar, SemesterRecord
+from app.models.scholar import Scholar, SemesterRecord, ScholarStatusLog, SCHOLAR_STATUS_TRANSITIONS
+from app.models.user import User
 from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, SemesterRecordUpdate
-from app.exceptions import NotFoundError
+from app.exceptions import NotFoundError, ValidationError
 
 
 async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Scholar]:
@@ -28,13 +28,51 @@ async def get_scholar(db: AsyncSession, scholar_id: int) -> Scholar:
     return scholar
 
 
-async def update_scholar_status(db: AsyncSession, scholar_id: int, data: ScholarStatusUpdate) -> Scholar:
+async def update_scholar_status(
+    db: AsyncSession,
+    scholar_id: int,
+    data: ScholarStatusUpdate,
+    actor: User | None = None,
+) -> Scholar:
     scholar = await get_scholar(db, scholar_id)
+    old_status = scholar.status
+
+    allowed = SCHOLAR_STATUS_TRANSITIONS.get(old_status, [])
+    if data.status not in allowed:
+        raise ValidationError(
+            f"Cannot transition scholar from '{old_status}' to '{data.status}'. "
+            f"Allowed: {[s.value for s in allowed] or 'none (terminal state)'}"
+        )
+
     scholar.status = data.status
     if data.is_graduating is not None:
         scholar.is_graduating = data.is_graduating
     if data.expected_graduation is not None:
         scholar.expected_graduation = data.expected_graduation
+
+    log = ScholarStatusLog(
+        scholar_id=scholar_id,
+        from_status=old_status,
+        to_status=data.status,
+        actor_id=actor.id if actor else None,
+        reason=data.reason,
+    )
+    db.add(log)
+
+    if data.status.value == "terminated":
+        from app.utils.email import send_scholar_terminated_email
+        from app.models.user import User as UserModel
+        from sqlalchemy.orm import selectinload as _sel
+        result = await db.execute(
+            select(UserModel).where(UserModel.id == scholar.student_id)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            try:
+                await send_scholar_terminated_email(user.email, data.reason)
+            except Exception:
+                pass  # email failure must not block the status update
+
     await db.commit()
     await db.refresh(scholar)
     return scholar

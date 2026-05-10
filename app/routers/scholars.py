@@ -47,10 +47,10 @@ async def get_scholar(
 async def update_status(
     scholar_id: int,
     data: ScholarStatusUpdate,
-    _: User = Depends(require_osfa_or_admin),
+    actor: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholar_service.update_scholar_status(db, scholar_id, data)
+    return await scholar_service.update_scholar_status(db, scholar_id, data, actor)
 
 
 @router.post("/{scholar_id}/semester-records", response_model=SemesterRecordResponse, status_code=201)

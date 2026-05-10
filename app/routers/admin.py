@@ -15,6 +15,7 @@ from app.models.audit import AuditEntry
 from app.models.notification import Notification
 from app.schemas.admin import StaffCreate, StaffUpdate, StaffResponse
 from app.utils.security import hash_password
+from app.utils.audit import log_system_audit
 from app.exceptions import ConflictError, NotFoundError, ValidationError
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -51,7 +52,7 @@ async def list_staff(
 async def create_staff(
     data: StaffCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    actor: User = Depends(require_super_admin),
 ):
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
@@ -66,6 +67,9 @@ async def create_staff(
         is_active=True,
     )
     db.add(user)
+    await db.flush()
+    await log_system_audit(db, actor.id, "user", "create_staff", entity_id=user.id,
+                           after_state={"email": user.email, "department": data.department})
     await db.commit()
     await db.refresh(user)
     return StaffResponse(
@@ -80,7 +84,7 @@ async def update_staff(
     staff_id: int,
     data: StaffUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    actor: User = Depends(require_super_admin),
 ):
     result = await db.execute(
         select(User).where(User.id == staff_id, User.role == UserRole.osfa_staff)
@@ -88,10 +92,14 @@ async def update_staff(
     user = result.scalar_one_or_none()
     if not user:
         raise NotFoundError("Staff", staff_id)
+    before = {"department": user.department.value if user.department else None, "is_active": user.is_active}
     if data.department is not None:
         user.department = DepartmentEnum(data.department)
     if data.is_active is not None:
         user.is_active = data.is_active
+    after = {"department": user.department.value if user.department else None, "is_active": user.is_active}
+    await log_system_audit(db, actor.id, "user", "update_staff", entity_id=staff_id,
+                           before_state=before, after_state=after)
     await db.commit()
     await db.refresh(user)
     return StaffResponse(
@@ -105,7 +113,7 @@ async def update_staff(
 async def delete_staff(
     staff_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    actor: User = Depends(require_super_admin),
 ):
     result = await db.execute(
         select(User).where(User.id == staff_id, User.role == UserRole.osfa_staff)
@@ -113,6 +121,8 @@ async def delete_staff(
     user = result.scalar_one_or_none()
     if not user:
         raise NotFoundError("Staff", staff_id)
+    await log_system_audit(db, actor.id, "user", "delete_staff", entity_id=staff_id,
+                           before_state={"email": user.email, "department": user.department.value if user.department else None})
     await db.delete(user)
     await db.commit()
 
@@ -122,7 +132,7 @@ async def reset_staff_password(
     staff_id: int,
     data: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    actor: User = Depends(require_super_admin),
 ):
     if len(data.new_password) < 8:
         raise ValidationError("Password must be at least 8 characters")
@@ -133,6 +143,7 @@ async def reset_staff_password(
     if not user:
         raise NotFoundError("Staff", staff_id)
     user.hashed_password = hash_password(data.new_password)
+    await log_system_audit(db, actor.id, "user", "reset_staff_password", entity_id=staff_id)
     await db.commit()
     return {"message": "Password reset successfully"}
 
@@ -252,7 +263,7 @@ async def get_audit_logs(
 async def broadcast_notification(
     data: BroadcastRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    actor: User = Depends(require_super_admin),
 ):
     if data.target == "students":
         role_filter = UserRole.student
@@ -272,6 +283,8 @@ async def broadcast_notification(
         for u in users
     ]
     db.add_all(notifications)
+    await log_system_audit(db, actor.id, "broadcast", "broadcast_notification",
+                           after_state={"title": data.title, "target": data.target, "recipient_count": len(notifications)})
     await db.commit()
 
     from app.websocket import manager

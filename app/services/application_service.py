@@ -287,6 +287,18 @@ async def update_application_status(
     title, body = notif_map[data.status]
     await create_notification(db, app.student_id, title, body, app.id)
 
+    # Send email for rejection and incomplete — critical events the student may miss in-app
+    if data.status in (ApplicationStatus.rejected, ApplicationStatus.incomplete):
+        from app.models.user import User as _User
+        user_result = await db.execute(select(_User).where(_User.id == app.student_id))
+        user = user_result.scalar_one_or_none()
+        if user:
+            from app.utils.email import send_application_status_email
+            try:
+                await send_application_status_email(user.email, sch_name, data.status.value, data.remarks)
+            except Exception:
+                pass  # email failure must not block the status update
+
     if data.status == ApplicationStatus.approved:
         from sqlalchemy.exc import IntegrityError
         existing = await db.execute(select(Scholar).where(Scholar.application_id == app.id))
@@ -297,10 +309,13 @@ async def update_application_status(
                 scholarship_id=app.scholarship_id,
             )
             db.add(scholar)
-            try:
-                await db.flush()
-            except IntegrityError:
-                await db.rollback()
+            # Use a savepoint so an IntegrityError only rolls back the Scholar
+            # insert, NOT the status update already pending in the outer transaction.
+            async with db.begin_nested():
+                try:
+                    await db.flush()
+                except IntegrityError:
+                    pass  # Scholar already exists — harmless duplicate, outer tx intact
 
     await db.commit()
     await db.refresh(app)

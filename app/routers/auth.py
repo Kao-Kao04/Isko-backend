@@ -106,14 +106,22 @@ async def refresh(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     response: Response,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
 ):
-    if credentials:
-        import hashlib
-        from app.token_blacklist import revoke
-        revoke(hashlib.sha256(credentials.credentials.encode()).hexdigest())
+    import hashlib
+    from app.token_blacklist import revoke_and_persist
+
+    # Revoke whichever token we can find (header OR cookie)
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if token:
+        await revoke_and_persist(hashlib.sha256(token.encode()).hexdigest(), db)
+
+    response.delete_cookie("access_token", samesite="none", secure=True)
     response.delete_cookie("refresh_token", samesite="none", secure=True)
+    response.delete_cookie("csrf_token", samesite="none", secure=True)
     return {"message": "Logged out"}
 
 

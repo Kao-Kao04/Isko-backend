@@ -30,10 +30,22 @@ class SemesterRecordResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ScholarStatusLogResponse(BaseModel):
+    id: int
+    from_status: ScholarStatus | None
+    to_status: ScholarStatus
+    actor_id: int | None
+    reason: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ScholarStatusUpdate(BaseModel):
     status: ScholarStatus
     is_graduating: bool | None = None
     expected_graduation: str | None = None
+    reason: str | None = None
 
 
 class ScholarResponse(BaseModel):
@@ -46,5 +58,6 @@ class ScholarResponse(BaseModel):
     expected_graduation: str | None
     created_at: datetime
     semester_records: List[SemesterRecordResponse] = []
+    status_logs: List[ScholarStatusLogResponse] = []
 
     model_config = {"from_attributes": True}

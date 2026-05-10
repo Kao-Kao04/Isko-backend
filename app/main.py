@@ -54,6 +54,17 @@ app = FastAPI(
     redoc_url=_redoc_url,
     openapi_url=_openapi_url,
 )
+
+
+@app.on_event("startup")
+async def _warm_token_blacklist() -> None:
+    from app.database import AsyncSessionLocal
+    from app.token_blacklist import load_from_db
+    try:
+        async with AsyncSessionLocal() as db:
+            await load_from_db(db)
+    except Exception as exc:
+        logger.warning("Could not load revoked tokens on startup: %s", exc)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
