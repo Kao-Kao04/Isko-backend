@@ -68,14 +68,11 @@ async def _warm_token_blacklist() -> None:
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# ── Middleware stack — ORDER MATTERS ─────────────────────────────────────────
+# FastAPI/Starlette uses LIFO: the LAST middleware registered is OUTERMOST.
+# CORSMiddleware must be outermost so it adds Access-Control headers to ALL
+# responses including CSRF 403s — otherwise the browser blocks the response
+# and the frontend sees "Failed to fetch" instead of the actual error.
 
 app.middleware("http")(csrf_middleware)
 
@@ -99,6 +96,16 @@ async def security_headers(request, call_next):
     if settings.ENVIRONMENT == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+# CORSMiddleware added LAST → outermost → wraps ALL responses including CSRF 403
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ── Exception handlers ────────────────────────────────────────────────────────
