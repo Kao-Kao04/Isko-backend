@@ -59,35 +59,41 @@ async def verify_email(code: str | None = None, db: AsyncSession = Depends(get_d
     return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?verified=true")
 
 
-def _set_auth_cookies(response: Response, tokens: dict, remember_me: bool = False) -> None:
+def _set_auth_cookies(response: Response, tokens: dict, remember_me: bool = False) -> str:
+    """Set auth cookies and return the CSRF token so it can be included in the response body.
+
+    The csrf_token cookie is scoped to the Railway domain and cannot be read by
+    JavaScript running on the Vercel frontend (different domain). Returning it in
+    the response body lets the frontend store it in localStorage and send it as
+    the X-CSRF-Token header on mutating requests.
+    """
     from app.csrf import generate_csrf_token
     csrf = generate_csrf_token()
     max_age_refresh = 60 * 60 * 24 * 30 if remember_me else 60 * 60 * 24 * 7
     max_age_access  = 60 * 16  # 16 min (slightly > 15-min token lifetime)
 
-    # Access token — HttpOnly so JS cannot steal it
     response.set_cookie(
         "access_token", tokens["access_token"],
         httponly=True, secure=True, samesite="none", max_age=max_age_access,
     )
-    # Refresh token — HttpOnly
     response.set_cookie(
         "refresh_token", tokens["refresh_token"],
         httponly=True, secure=True, samesite="none", max_age=max_age_refresh,
     )
-    # CSRF token — readable by JS for Double Submit Cookie pattern
+    # Keep the cookie for same-origin / browser-native clients
     response.set_cookie(
         "csrf_token", csrf,
         httponly=False, secure=True, samesite="none", max_age=max_age_access,
     )
+    return csrf
 
 
 @router.post("/login")
 @limiter.limit("10/minute")
 async def login(request: Request, data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     tokens = await auth_service.login(db, data)
-    _set_auth_cookies(response, tokens, remember_me=data.remember_me)
-    return TokenResponse(access_token=tokens["access_token"])
+    csrf = _set_auth_cookies(response, tokens, remember_me=data.remember_me)
+    return {**TokenResponse(access_token=tokens["access_token"]).model_dump(), "csrf_token": csrf}
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -100,8 +106,8 @@ async def refresh(
     if not refresh_token:
         raise UnauthorizedError("No refresh token")
     tokens = await auth_service.refresh_tokens(db, refresh_token)
-    _set_auth_cookies(response, tokens)
-    return TokenResponse(access_token=tokens["access_token"])
+    csrf = _set_auth_cookies(response, tokens)
+    return {**TokenResponse(access_token=tokens["access_token"]).model_dump(), "csrf_token": csrf}
 
 
 @router.post("/logout")
