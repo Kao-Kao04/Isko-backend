@@ -5,6 +5,8 @@ import enum
 from app.database import Base
 from app.models.workflow import MainStatus, SubStatus
 
+_vc = lambda x: [e.value for e in x]  # noqa: E731 — sends enum VALUES not names to Postgres
+
 
 class ApplicationStatus(str, enum.Enum):
     """Legacy status — kept for backward compatibility."""
@@ -36,8 +38,8 @@ class Application(Base):
     remarks       = Column(Text)
 
     # ── New workflow columns ──────────────────────────────────────────────────
-    main_status   = Column(SAEnum(MainStatus), nullable=True)
-    sub_status    = Column(SAEnum(SubStatus),  nullable=True)
+    main_status   = Column(SAEnum(MainStatus, values_callable=_vc, create_constraint=False), nullable=True)
+    sub_status    = Column(SAEnum(SubStatus,  values_callable=_vc, create_constraint=False), nullable=True)
 
     # Timestamps per stage
     screened_at             = Column(DateTime(timezone=True), nullable=True)
@@ -78,10 +80,10 @@ class WorkflowLog(Base):
     id              = Column(Integer, primary_key=True, index=True)
     application_id  = Column(Integer, ForeignKey("applications.id"), nullable=False)
     changed_by      = Column(Integer, ForeignKey("users.id"), nullable=False)
-    from_main       = Column(SAEnum(MainStatus), nullable=True)
-    from_sub        = Column(SAEnum(SubStatus),  nullable=True)
-    to_main         = Column(SAEnum(MainStatus), nullable=False)
-    to_sub          = Column(SAEnum(SubStatus),  nullable=False)
+    from_main       = Column(SAEnum(MainStatus, values_callable=_vc, create_constraint=False), nullable=True)
+    from_sub        = Column(SAEnum(SubStatus,  values_callable=_vc, create_constraint=False), nullable=True)
+    to_main         = Column(SAEnum(MainStatus, values_callable=_vc, create_constraint=False), nullable=False)
+    to_sub          = Column(SAEnum(SubStatus,  values_callable=_vc, create_constraint=False), nullable=False)
     note            = Column(Text, nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
