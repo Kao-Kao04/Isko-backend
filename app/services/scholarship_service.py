@@ -83,29 +83,21 @@ async def create_scholarship(db: AsyncSession, data: ScholarshipCreate, user: Us
     if not data.category:
         data.category = "public"
 
-    scholarship = Scholarship(
-        name=data.name,
-        description=data.description,
-        slots=data.slots,
-        deadline=data.deadline,
-        eligible_colleges=data.eligible_colleges,
-        eligible_programs=data.eligible_programs,
-        eligible_year_levels=data.eligible_year_levels,
-        min_gwa=data.min_gwa,
-        category=data.category,
-        created_by=user.id,
-    )
+    # Build from all schema fields dynamically — never miss a new field again
+    create_data = data.model_dump(exclude={"requirements"})
+    create_data["created_by"] = user.id
+
+    scholarship = Scholarship(**create_data)
     db.add(scholarship)
     await db.flush()
 
     for req in data.requirements:
-        r = ScholarshipRequirement(
+        db.add(ScholarshipRequirement(
             scholarship_id=scholarship.id,
             name=req.name,
             description=req.description,
             is_required=req.is_required,
-        )
-        db.add(r)
+        ))
 
     await db.commit()
     return await get_scholarship(db, scholarship.id)
