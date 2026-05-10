@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Enum as SAEnum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -90,14 +90,19 @@ class WorkflowLog(Base):
 
 
 class CompletionRequirement(Base):
-    """Post-approval documents submitted by student."""
+    """Post-approval compliance document submitted by student and verified by OSFA."""
     __tablename__ = "completion_requirements"
 
-    id              = Column(Integer, primary_key=True, index=True)
-    application_id  = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    requirement_type = Column(String, nullable=False)   # e.g. "thank_you_letter"
-    file_url        = Column(String, nullable=True)
-    submitted_at    = Column(DateTime(timezone=True), nullable=True)
-    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    id               = Column(Integer, primary_key=True, index=True)
+    application_id   = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    requirement_type = Column(String, nullable=False)   # matches ComplianceDocumentType.name
+    file_url         = Column(String, nullable=True)
+    notes            = Column(Text, nullable=True)
+    submitted_at     = Column(DateTime(timezone=True), nullable=True)
+    is_verified      = Column(Boolean, nullable=False, default=False)
+    verified_by      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    verified_at      = Column(DateTime(timezone=True), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
 
     application = relationship("Application", back_populates="completion_requirements")
+    verifier    = relationship("User", foreign_keys=[verified_by])

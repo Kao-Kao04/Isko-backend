@@ -69,6 +69,12 @@ class SemesterRecord(Base):
     has_grade_below_2_5 = Column(Boolean, nullable=False, default=False)
     is_enrolled = Column(Boolean, default=True)
     notes = Column(Text)
+    # Benefit tracking
+    benefit_released    = Column(Boolean, nullable=False, default=False)
+    benefit_released_at = Column(DateTime(timezone=True), nullable=True)
+    # Thank you letter (private scholarships only)
+    thank_you_submitted    = Column(Boolean, nullable=False, default=False)
+    thank_you_submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

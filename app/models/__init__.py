@@ -1,6 +1,6 @@
 from app.models.user import User, StudentProfile
-from app.models.scholarship import Scholarship, ScholarshipRequirement
-from app.models.application import Application
+from app.models.scholarship import Scholarship, ScholarshipRequirement, ComplianceDocumentType
+from app.models.application import Application, CompletionRequirement
 from app.models.document import ApplicationDocument
 from app.models.audit import AuditEntry
 from app.models.notification import Notification

@@ -53,6 +53,8 @@ class ScholarshipCreate(BaseModel):
     eligibility_text: str | None = None
     cover_image_url: str | None = None
     category: str | None = None
+    max_semesters: int | None = None
+    requires_thank_you_letter: bool = False
     requirements: List[RequirementCreate] = []
 
     @field_validator("name", "scholarship_type", "period", mode="before")
@@ -83,6 +85,8 @@ class ScholarshipUpdate(BaseModel):
     eligibility_text: str | None = None
     cover_image_url: str | None = None
     category: str | None = None
+    max_semesters: int | None = None
+    requires_thank_you_letter: bool | None = None
     requirements: List[RequirementCreate] | None = None
 
     @field_validator("name", "scholarship_type", "period", mode="before")
@@ -119,6 +123,8 @@ class ScholarshipResponse(BaseModel):
     eligibility_text: str | None
     cover_image_url: str | None
     category: str | None
+    max_semesters: int | None
+    requires_thank_you_letter: bool
     applicants_count: int = 0
     requirements: List[RequirementResponse] = []
     created_at: datetime

@@ -28,6 +28,10 @@ class SemesterRecordResponse(BaseModel):
     has_grade_below_2_5: bool
     is_enrolled: bool
     notes: str | None
+    benefit_released: bool
+    benefit_released_at: datetime | None
+    thank_you_submitted: bool
+    thank_you_submitted_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

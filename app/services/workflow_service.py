@@ -440,12 +440,54 @@ async def finalize(
     _assert_dept(app, actor)
     if app.sub_status != SubStatus.REQUIREMENTS_SUBMITTED:
         raise ValidationError("Requirements must be submitted before finalizing.")
+
+    # Verify all required compliance docs are verified before finalizing
+    from app.models.application import CompletionRequirement
+    from app.models.scholarship import ComplianceDocumentType
+    from sqlalchemy import select as _select
+    required_types = (await db.execute(
+        _select(ComplianceDocumentType.name).where(
+            ComplianceDocumentType.scholarship_id == app.scholarship_id,
+            ComplianceDocumentType.is_required == True,
+        )
+    )).scalars().all()
+    if required_types:
+        unverified = (await db.execute(
+            _select(CompletionRequirement).where(
+                CompletionRequirement.application_id == application_id,
+                CompletionRequirement.requirement_type.in_(required_types),
+                CompletionRequirement.is_verified == False,
+            )
+        )).scalars().all()
+        if unverified:
+            names = ", ".join(r.requirement_type for r in unverified)
+            raise ValidationError(f"Cannot finalize — unverified compliance documents: {names}")
+
     await _apply(db, app, actor, MainStatus.COMPLETION, SubStatus.COMPLETED, note)
     app.closed_at = _now()
+
+    # Auto-activate the scholar record
+    from app.models.scholar import Scholar, ScholarStatus, ScholarStatusLog
+    scholar_result = await db.execute(
+        _select(Scholar).where(Scholar.application_id == application_id)
+    )
+    scholar = scholar_result.scalar_one_or_none()
+    if scholar and scholar.status == ScholarStatus.active:
+        pass  # already active from release_decision
+    elif scholar:
+        db.add(ScholarStatusLog(
+            scholar_id=scholar.id,
+            from_status=scholar.status,
+            to_status=ScholarStatus.active,
+            actor_id=actor.id,
+            reason="Compliance documents verified — scholar officially activated",
+        ))
+        scholar.status = ScholarStatus.active
+
     notif = _queue_notification(
         db, app.student_id,
-        "Scholarship Completed",
-        f"Your scholarship for {_sch_name(app)} has been finalized. Congratulations!",
+        "Scholarship Compliance Complete — Welcome!",
+        f"All compliance documents for {_sch_name(app)} have been verified. You are now an official scholar!",
         app.id,
     )
     return await _commit_and_notify(db, app, notif)

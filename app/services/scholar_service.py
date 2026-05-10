@@ -1,9 +1,10 @@
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.scholar import Scholar, ScholarStatus, SemesterRecord, ScholarStatusLog, SCHOLAR_STATUS_TRANSITIONS
 from app.models.user import User
 from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, SemesterRecordUpdate
-from app.exceptions import NotFoundError, ValidationError
+from app.exceptions import NotFoundError, ValidationError, ForbiddenError
 
 
 async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Scholar]:
@@ -163,6 +164,62 @@ async def update_semester_record(
             record.gwa,
             record.has_grade_below_2_5,
         )
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+async def _get_semester_record(db: AsyncSession, scholar_id: int, record_id: int) -> SemesterRecord:
+    result = await db.execute(
+        select(SemesterRecord).where(
+            SemesterRecord.id == record_id,
+            SemesterRecord.scholar_id == scholar_id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise NotFoundError("SemesterRecord", record_id)
+    return record
+
+
+async def release_benefit(db: AsyncSession, scholar_id: int, record_id: int, actor: User) -> SemesterRecord:
+    """OSFA marks a scholar's semester benefit as released."""
+    scholar = await get_scholar(db, scholar_id)
+    if scholar.status not in (ScholarStatus.active, ScholarStatus.probationary):
+        raise ValidationError(
+            f"Cannot release benefit — scholar status is '{scholar.status}'. "
+            "Only active or probationary scholars can receive benefits."
+        )
+    record = await _get_semester_record(db, scholar_id, record_id)
+    if record.benefit_released:
+        raise ValidationError("Benefit has already been released for this semester record.")
+    record.benefit_released = True
+    record.benefit_released_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+async def submit_thank_you(db: AsyncSession, scholar_id: int, record_id: int, actor: User) -> SemesterRecord:
+    """Mark that the scholar submitted their thank you letter this semester."""
+    scholar = await get_scholar(db, scholar_id)
+
+    if actor.role.value == "student" and scholar.student_id != actor.id:
+        raise ForbiddenError()
+
+    record = await _get_semester_record(db, scholar_id, record_id)
+    if not record.benefit_released:
+        raise ValidationError("Thank you letter can only be submitted after the benefit has been released.")
+    if record.thank_you_submitted:
+        raise ValidationError("Thank you letter already recorded for this semester.")
+
+    from app.models.scholarship import Scholarship
+    sch = (await db.execute(select(Scholarship).where(Scholarship.id == scholar.scholarship_id))).scalar_one_or_none()
+    if sch and not sch.requires_thank_you_letter:
+        raise ValidationError("This scholarship does not require a thank you letter.")
+
+    record.thank_you_submitted = True
+    record.thank_you_submitted_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(record)
     return record

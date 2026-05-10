@@ -40,17 +40,35 @@ class Scholarship(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    requirements = relationship("ScholarshipRequirement", back_populates="scholarship", cascade="all, delete-orphan")
-    applications = relationship("Application", back_populates="scholarship", cascade="all, delete-orphan")
+    max_semesters             = Column(Integer, nullable=True)         # null = no limit
+    requires_thank_you_letter = Column(Boolean, nullable=False, default=False)
+
+    requirements         = relationship("ScholarshipRequirement", back_populates="scholarship", cascade="all, delete-orphan")
+    applications         = relationship("Application", back_populates="scholarship", cascade="all, delete-orphan")
+    compliance_doc_types = relationship("ComplianceDocumentType", back_populates="scholarship", cascade="all, delete-orphan", order_by="ComplianceDocumentType.order")
 
 
 class ScholarshipRequirement(Base):
     __tablename__ = "scholarship_requirements"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id             = Column(Integer, primary_key=True, index=True)
     scholarship_id = Column(Integer, ForeignKey("scholarships.id"), nullable=False)
-    name = Column(String, nullable=False)
-    description = Column(Text)
-    is_required = Column(Boolean, default=True)
+    name           = Column(String, nullable=False)
+    description    = Column(Text)
+    is_required    = Column(Boolean, default=True)
 
     scholarship = relationship("Scholarship", back_populates="requirements")
+
+
+class ComplianceDocumentType(Base):
+    """OSFA-configured post-approval compliance documents required per scholarship."""
+    __tablename__ = "compliance_document_types"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    scholarship_id = Column(Integer, ForeignKey("scholarships.id"), nullable=False)
+    name           = Column(String, nullable=False)   # e.g. "Scholarship Agreement"
+    description    = Column(Text, nullable=True)
+    is_required    = Column(Boolean, nullable=False, default=True)
+    order          = Column(Integer, nullable=False, default=0)
+
+    scholarship = relationship("Scholarship", back_populates="compliance_doc_types")
