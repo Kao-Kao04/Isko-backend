@@ -66,6 +66,7 @@ class SemesterRecord(Base):
     semester = Column(String, nullable=False)
     academic_year = Column(String, nullable=False)
     gwa = Column(String)
+    has_grade_below_2_5 = Column(Boolean, nullable=False, default=False)
     is_enrolled = Column(Boolean, default=True)
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

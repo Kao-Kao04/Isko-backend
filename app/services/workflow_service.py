@@ -162,6 +162,8 @@ async def complete_screening(
         await _apply(db, app, actor, MainStatus.APPLICATION, SubStatus.SCREENING_FAILED, note)
         await _apply(db, app, actor, MainStatus.REJECTED, SubStatus.REJECTED, note)
         app.closed_at = _now()
+        from app.models.application import ApplicationStatus
+        app.status = ApplicationStatus.rejected
         notif = _queue_notification(
             db, app.student_id,
             "Application Screened Out",

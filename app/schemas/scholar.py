@@ -8,12 +8,14 @@ class SemesterRecordCreate(BaseModel):
     semester: str
     academic_year: str
     gwa: str | None = None
+    has_grade_below_2_5: bool = False
     is_enrolled: bool = True
     notes: str | None = None
 
 
 class SemesterRecordUpdate(BaseModel):
     gwa: str | None = None
+    has_grade_below_2_5: bool | None = None
     is_enrolled: bool | None = None
     notes: str | None = None
 
@@ -23,6 +25,7 @@ class SemesterRecordResponse(BaseModel):
     semester: str
     academic_year: str
     gwa: str | None
+    has_grade_below_2_5: bool
     is_enrolled: bool
     notes: str | None
     created_at: datetime

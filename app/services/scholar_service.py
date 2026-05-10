@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from app.models.scholar import Scholar, SemesterRecord, ScholarStatusLog, SCHOLAR_STATUS_TRANSITIONS
+from app.models.scholar import Scholar, ScholarStatus, SemesterRecord, ScholarStatusLog, SCHOLAR_STATUS_TRANSITIONS
 from app.models.user import User
 from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, SemesterRecordUpdate
 from app.exceptions import NotFoundError, ValidationError
@@ -78,10 +78,67 @@ async def update_scholar_status(
     return scholar
 
 
+async def _evaluate_retention(db: AsyncSession, scholar: Scholar, gwa: str | None, has_grade_below_2_5: bool) -> None:
+    """Auto-set scholar status based on GWA and grade flag after a semester record is saved."""
+    from app.models.scholarship import Scholarship
+    sch_result = await db.execute(select(Scholarship).where(Scholarship.id == scholar.scholarship_id))
+    scholarship = sch_result.scalar_one_or_none()
+    min_gwa = float(scholarship.min_gwa) if (scholarship and scholarship.min_gwa) else 2.0
+
+    if not gwa:
+        return  # no GWA submitted yet — nothing to evaluate
+
+    try:
+        student_gwa = float(gwa)
+    except (ValueError, TypeError):
+        return
+
+    # In PUP grading: lower number = better. 1.0 is best, 5.0 is failing.
+    gwa_fails = student_gwa > min_gwa
+    grade_flag_fails = has_grade_below_2_5
+
+    current = scholar.status
+    if current in (ScholarStatus.terminated, ScholarStatus.graduated):
+        return  # terminal — never auto-change
+
+    if gwa_fails or grade_flag_fails:
+        if current == ScholarStatus.active:
+            allowed = SCHOLAR_STATUS_TRANSITIONS.get(current, [])
+            if ScholarStatus.probationary in allowed:
+                reason = []
+                if gwa_fails:
+                    reason.append(f"GWA {gwa} is below required {min_gwa}")
+                if grade_flag_fails:
+                    reason.append("has subject grade below 2.5")
+                log = ScholarStatusLog(
+                    scholar_id=scholar.id,
+                    from_status=current,
+                    to_status=ScholarStatus.probationary,
+                    actor_id=None,
+                    reason="Auto-evaluated: " + "; ".join(reason),
+                )
+                db.add(log)
+                scholar.status = ScholarStatus.probationary
+    else:
+        # GWA and grades are good — lift probation if currently on it
+        if current == ScholarStatus.probationary:
+            log = ScholarStatusLog(
+                scholar_id=scholar.id,
+                from_status=current,
+                to_status=ScholarStatus.active,
+                actor_id=None,
+                reason=f"Auto-evaluated: GWA {gwa} meets requirement; no failing grades",
+            )
+            db.add(log)
+            scholar.status = ScholarStatus.active
+
+
 async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterRecordCreate) -> SemesterRecord:
-    await get_scholar(db, scholar_id)
+    scholar = await get_scholar(db, scholar_id)
     record = SemesterRecord(scholar_id=scholar_id, **data.model_dump())
     db.add(record)
+    await db.flush()
+    await _evaluate_retention(db, scholar, data.gwa, data.has_grade_below_2_5)
     await db.commit()
     await db.refresh(record)
     return record
@@ -98,6 +155,14 @@ async def update_semester_record(
         raise NotFoundError("SemesterRecord", record_id)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(record, field, value)
+    # Re-evaluate retention whenever GWA or grade flag changes
+    if data.gwa is not None or data.has_grade_below_2_5 is not None:
+        scholar = await get_scholar(db, scholar_id)
+        await _evaluate_retention(
+            db, scholar,
+            record.gwa,
+            record.has_grade_below_2_5,
+        )
     await db.commit()
     await db.refresh(record)
     return record

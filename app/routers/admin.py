@@ -10,6 +10,7 @@ from app.database import get_db
 from app.dependencies import require_super_admin
 from app.models.user import User, UserRole, DepartmentEnum, AccountStatus
 from app.models.application import Application
+from app.models.workflow import MainStatus
 from app.models.scholarship import Scholarship
 from app.models.audit import AuditEntry
 from app.models.notification import Notification
@@ -176,11 +177,22 @@ async def get_stats(
             "archived": await count(select(func.count(Scholarship.id)).where(Scholarship.status == "archived")),
         },
         "applications": {
-            "total":      await count(select(func.count(Application.id))),
-            "pending":    await count(select(func.count(Application.id)).where(Application.status == "pending")),
-            "approved":   await count(select(func.count(Application.id)).where(Application.status == "approved")),
-            "rejected":   await count(select(func.count(Application.id)).where(Application.status == "rejected")),
-            "withdrawn":  await count(select(func.count(Application.id)).where(Application.status == "withdrawn")),
+            "total":       await count(select(func.count(Application.id))),
+            "in_progress": await count(select(func.count(Application.id)).where(
+                Application.main_status.in_([
+                    MainStatus.APPLICATION, MainStatus.VERIFICATION,
+                    MainStatus.INTERVIEW, MainStatus.DECISION,
+                ])
+            )),
+            "approved":    await count(select(func.count(Application.id)).where(
+                Application.main_status == MainStatus.COMPLETION
+            )),
+            "rejected":    await count(select(func.count(Application.id)).where(
+                Application.main_status == MainStatus.REJECTED
+            )),
+            "withdrawn":   await count(select(func.count(Application.id)).where(
+                Application.main_status == MainStatus.WITHDRAWN
+            )),
         },
     }
 
