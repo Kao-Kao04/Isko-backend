@@ -25,7 +25,7 @@ def upgrade() -> None:
     op.execute("""
         UPDATE applications
         SET status = 'rejected'
-        WHERE main_status = 'REJECTED'
+        WHERE main_status = 'rejected'
           AND status = 'pending'
     """)
 
@@ -33,7 +33,7 @@ def upgrade() -> None:
     op.execute("""
         UPDATE applications
         SET status = 'withdrawn'
-        WHERE main_status = 'WITHDRAWN'
+        WHERE main_status = 'withdrawn'
           AND status = 'pending'
     """)
 
@@ -41,7 +41,7 @@ def upgrade() -> None:
     op.execute("""
         UPDATE applications
         SET status = 'approved'
-        WHERE main_status = 'COMPLETION'
+        WHERE main_status = 'completion'
           AND status != 'approved'
     """)
 

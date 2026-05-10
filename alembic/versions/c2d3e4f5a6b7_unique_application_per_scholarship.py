@@ -14,11 +14,11 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+        CREATE UNIQUE INDEX IF NOT EXISTS
         uix_active_application ON applications(student_id, scholarship_id)
         WHERE status != 'withdrawn'
     """)
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS uix_active_application")
+    op.execute("DROP INDEX IF EXISTS uix_active_application")

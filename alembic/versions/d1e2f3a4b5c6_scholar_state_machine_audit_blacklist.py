@@ -29,22 +29,19 @@ def upgrade() -> None:
     op.execute("ALTER TYPE scholarstatus ADD VALUE IF NOT EXISTS 'on_leave'")
     op.execute("ALTER TYPE scholarstatus ADD VALUE IF NOT EXISTS 'suspended'")
 
-    # ── scholar_status_logs ───────────────────────────────────────────────────
-    op.create_table(
-        'scholar_status_logs',
-        sa.Column('id', sa.Integer(), primary_key=True),
-        sa.Column('scholar_id', sa.Integer(), sa.ForeignKey('scholars.id'), nullable=False),
-        sa.Column('from_status', sa.Enum('active', 'probationary', 'under_review', 'on_leave',
-                                         'suspended', 'terminated', 'graduated',
-                                         name='scholarstatus'), nullable=True),
-        sa.Column('to_status', sa.Enum('active', 'probationary', 'under_review', 'on_leave',
-                                       'suspended', 'terminated', 'graduated',
-                                       name='scholarstatus'), nullable=False),
-        sa.Column('actor_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='SET NULL'), nullable=True),
-        sa.Column('reason', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    )
-    op.create_index('ix_scholar_status_logs_scholar_id', 'scholar_status_logs', ['scholar_id'])
+    # ── scholar_status_logs — raw SQL to avoid re-creating existing enum ─────
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS scholar_status_logs (
+            id         SERIAL PRIMARY KEY,
+            scholar_id INTEGER NOT NULL REFERENCES scholars(id),
+            from_status scholarstatus,
+            to_status   scholarstatus NOT NULL,
+            actor_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            reason     TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_scholar_status_logs_scholar_id ON scholar_status_logs(scholar_id)")
 
     # ── system_audit_logs ─────────────────────────────────────────────────────
     op.create_table(
