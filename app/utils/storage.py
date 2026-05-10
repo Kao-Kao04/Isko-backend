@@ -67,7 +67,10 @@ async def delete_file(path: str) -> None:
     if not path:
         return
     try:
+        import asyncio
         sb = get_supabase()
-        sb.storage.from_(settings.SUPABASE_BUCKET).remove([path])
+        await asyncio.to_thread(
+            sb.storage.from_(settings.SUPABASE_BUCKET).remove, [path]
+        )
     except Exception:
         pass

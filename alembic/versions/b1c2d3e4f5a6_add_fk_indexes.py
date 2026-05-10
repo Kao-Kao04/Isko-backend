@@ -1,12 +1,12 @@
 """add FK indexes for performance
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: b1c2d3e4f5a6
 Revises: f1a2b3c4d5e6
 Create Date: 2026-05-09
 """
 from alembic import op
 
-revision = 'a1b2c3d4e5f6'
+revision = 'b1c2d3e4f5a6'
 down_revision = 'f1a2b3c4d5e6'
 branch_labels = None
 depends_on = None

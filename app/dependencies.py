@@ -1,4 +1,5 @@
-from fastapi import Depends
+import hashlib
+from fastapi import Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,17 +10,20 @@ from app.database import get_db
 from app.models.user import User, UserRole, AccountStatus
 from app.utils.security import decode_token
 from app.exceptions import UnauthorizedError, ForbiddenError
+from app.token_blacklist import is_revoked
 
 bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if not credentials:
+    # Accept token from Authorization header OR HttpOnly access_token cookie
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
         raise UnauthorizedError()
-    token = credentials.credentials
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
@@ -28,8 +32,6 @@ async def get_current_user(
     except (JWTError, KeyError, ValueError):
         raise UnauthorizedError("Invalid or expired token")
 
-    from app.token_blacklist import is_revoked
-    import hashlib
     if is_revoked(hashlib.sha256(token.encode()).hexdigest()):
         raise UnauthorizedError("Token has been revoked")
 

@@ -278,7 +278,7 @@ async def finalize(
 async def withdraw(
     application_id: int,
     data: WithdrawRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_student),
     db: AsyncSession = Depends(get_db),
 ):
     app = await workflow_service.withdraw(db, application_id, current_user, data.reason)

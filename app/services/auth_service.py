@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -156,10 +157,12 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> dict:
     result = await db.execute(
         select(User).where(User.id == user_id, User.is_active == True)
     )
-    if not result.scalar_one_or_none():
+    user = result.scalar_one_or_none()
+    if not user:
         raise UnauthorizedError("User not found or account has been deactivated")
 
-    token_payload = {"sub": payload["sub"], "role": payload["role"]}
+    # Re-fetch role from DB so role changes propagate immediately
+    token_payload = {"sub": str(user.id), "role": user.role}
     return {
         "access_token": create_access_token(token_payload),
         "refresh_token": create_refresh_token(token_payload),
@@ -177,13 +180,12 @@ async def send_password_reset(db: AsyncSession, email: str) -> None:
         return
 
     if settings.ENVIRONMENT == "development":
-        from datetime import timedelta
         from jose import jwt
         token = jwt.encode(
             {
                 "sub": str(user.id),
                 "type": "password_reset",
-                "exp": __import__("datetime").datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
             },
             settings.SECRET_KEY,
             algorithm=settings.ALGORITHM,
@@ -214,7 +216,6 @@ async def send_password_reset(db: AsyncSession, email: str) -> None:
 
 
 async def handle_reset_callback(code: str) -> str | None:
-    from datetime import timedelta
     from jose import jwt
     try:
         response = await asyncio.to_thread(
@@ -229,7 +230,7 @@ async def handle_reset_callback(code: str) -> str | None:
         {
             "supabase_uid": supabase_uid,
             "type": "password_reset",
-            "exp": __import__("datetime").datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
         },
         settings.SECRET_KEY,
         algorithm=settings.ALGORITHM,

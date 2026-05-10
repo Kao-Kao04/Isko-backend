@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.limiter import limiter
+from app.csrf import csrf_middleware
 from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws, workflow
 
 # ── Structured logging ───────────────────────────────────────────────────────
@@ -65,6 +66,9 @@ app.add_middleware(
 )
 
 
+app.middleware("http")(csrf_middleware)
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     response = await call_next(request)
@@ -73,6 +77,14 @@ async def security_headers(request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://*.supabase.co; "
+        "frame-ancestors 'none';"
+    )
     if settings.ENVIRONMENT == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -124,4 +136,5 @@ async def health():
         return {"status": "ok"}
     except Exception as exc:
         logger.error("Health check failed: %s", exc)
-        return JSONResponse(status_code=503, content={"status": "degraded", "detail": str(exc)})
+        detail = str(exc) if settings.ENVIRONMENT != "production" else "Database unavailable"
+        return JSONResponse(status_code=503, content={"status": "degraded", "detail": detail})
