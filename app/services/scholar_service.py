@@ -201,17 +201,17 @@ async def release_benefit(db: AsyncSession, scholar_id: int, record_id: int, act
 
 
 async def submit_thank_you(db: AsyncSession, scholar_id: int, record_id: int, actor: User) -> SemesterRecord:
-    """Mark that the scholar submitted their thank you letter this semester."""
+    """OSFA confirms they received the student's physical thank you letter."""
+    # Only OSFA staff or admin can mark this — the letter is submitted physically
+    if actor.role.value == "student":
+        raise ForbiddenError("Only OSFA staff can confirm receipt of the thank you letter.")
+
     scholar = await get_scholar(db, scholar_id)
-
-    if actor.role.value == "student" and scholar.student_id != actor.id:
-        raise ForbiddenError()
-
     record = await _get_semester_record(db, scholar_id, record_id)
     if not record.benefit_released:
-        raise ValidationError("Thank you letter can only be submitted after the benefit has been released.")
+        raise ValidationError("Thank you letter can only be confirmed after the benefit has been released.")
     if record.thank_you_submitted:
-        raise ValidationError("Thank you letter already recorded for this semester.")
+        raise ValidationError("Thank you letter already confirmed for this semester.")
 
     from app.models.scholarship import Scholarship
     sch = (await db.execute(select(Scholarship).where(Scholarship.id == scholar.scholarship_id))).scalar_one_or_none()
