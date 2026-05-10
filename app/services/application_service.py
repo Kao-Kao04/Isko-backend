@@ -175,8 +175,7 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
         f"Your application for {scholarship.name} has been submitted.", app.id
     )
     await db.commit()
-    await db.refresh(app)
-    return app
+    return await _get_application(db, app.id)
 
 
 async def resubmit_application(db: AsyncSession, application_id: int, student: User) -> Application:
@@ -213,8 +212,7 @@ async def resubmit_application(db: AsyncSession, application_id: int, student: U
         f"Your application for {scholarship.name if scholarship else 'the scholarship'} has been resubmitted.", app.id
     )
     await db.commit()
-    await db.refresh(app)
-    return app
+    return await _get_application(db, app.id)
 
 
 async def withdraw_application(db: AsyncSession, application_id: int, student: User) -> None:
@@ -318,8 +316,7 @@ async def update_application_status(
                     pass  # Scholar already exists — harmless duplicate, outer tx intact
 
     await db.commit()
-    await db.refresh(app)
-    return app
+    return await _get_application(db, app.id)
 
 
 async def update_eval_status(
@@ -329,8 +326,7 @@ async def update_eval_status(
     _check_department_ownership(app, staff)
     app.eval_status = data.eval_status
     await db.commit()
-    await db.refresh(app)
-    return app
+    return await _get_application(db, app.id)
 
 
 async def update_eval_score(
@@ -340,8 +336,7 @@ async def update_eval_score(
     _check_department_ownership(app, staff)
     app.eval_score = data.model_dump()
     await db.commit()
-    await db.refresh(app)
-    return app
+    return await _get_application(db, app.id)
 
 
 async def file_appeal(db: AsyncSession, application_id: int, data: AppealCreate, student: User) -> Appeal:
