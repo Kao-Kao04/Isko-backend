@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
@@ -197,7 +197,7 @@ async def reschedule_interview(
 @router.post("/{application_id}/complete-interview", status_code=200)
 async def complete_interview(
     application_id: int,
-    data: CompleteInterviewRequest,
+    data: CompleteInterviewRequest = Body(default=CompleteInterviewRequest()),
     current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
