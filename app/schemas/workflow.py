@@ -27,7 +27,7 @@ class ScheduleInterviewRequest(BaseModel):
 
 
 class RescheduleInterviewRequest(BaseModel):
-    reason: str
+    reason: str | None = None
 
 
 class CompleteInterviewRequest(BaseModel):

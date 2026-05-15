@@ -42,9 +42,11 @@ async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     account_status: str | None = Query(None),
+    filter: str | None = Query(None),
     _: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.application import Application as _App
     query = (
         select(User)
         .options(selectinload(User.student_profile))
@@ -59,7 +61,16 @@ async def list_users(
             query = query.where(User.account_status == status_enum)
             count_query = count_query.where(User.account_status == status_enum)
         except ValueError:
-            pass  # Invalid status — return unfiltered results
+            pass
+
+    if filter == "with_application":
+        sub = select(_App.student_id).distinct()
+        query = query.where(User.id.in_(sub))
+        count_query = count_query.where(User.id.in_(sub))
+    elif filter == "no_application":
+        sub = select(_App.student_id).distinct()
+        query = query.where(User.id.notin_(sub))
+        count_query = count_query.where(User.id.notin_(sub))
 
     count_result = await db.execute(count_query)
     total = count_result.scalar()

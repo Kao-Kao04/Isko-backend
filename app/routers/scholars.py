@@ -5,7 +5,7 @@ from app.database import get_db
 from app.dependencies import require_osfa_or_admin, require_student
 from app.models.user import User
 from app.schemas.scholar import (
-    ScholarResponse, ScholarStatusUpdate,
+    ScholarResponse, ScholarStatusUpdate, AllowanceUpdate,
     SemesterRecordCreate, SemesterRecordUpdate, SemesterRecordResponse,
 )
 from app.schemas.common import PaginatedResponse
@@ -27,10 +27,10 @@ async def my_scholars(
 async def list_scholars(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: User = Depends(require_osfa_or_admin),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    items, total = await scholar_service.list_scholars(db, page, page_size)
+    items, total = await scholar_service.list_scholars(db, current_user, page, page_size)
     return paginate(items, total, page, page_size)
 
 
@@ -61,6 +61,21 @@ async def add_semester_record(
     db: AsyncSession = Depends(get_db),
 ):
     return await scholar_service.add_semester_record(db, scholar_id, data)
+
+
+@router.patch("/{scholar_id}/allowance", response_model=ScholarResponse)
+async def update_allowance(
+    scholar_id: int,
+    data: AllowanceUpdate,
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    scholar = await scholar_service.get_scholar(db, scholar_id)
+    update = data.model_dump(exclude_unset=True)
+    for field, value in update.items():
+        setattr(scholar, field, value)
+    await db.commit()
+    return await scholar_service.get_scholar(db, scholar_id)
 
 
 @router.put("/{scholar_id}/semester-records/{record_id}", response_model=SemesterRecordResponse)

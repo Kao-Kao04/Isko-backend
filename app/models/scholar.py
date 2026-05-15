@@ -48,6 +48,11 @@ class Scholar(Base):
     status = Column(SAEnum(ScholarStatus), nullable=False, default=ScholarStatus.active)
     is_graduating = Column(Boolean, default=False)
     expected_graduation = Column(String)
+    # Allowance tracking
+    allowance_status   = Column(String, nullable=False, default="pending")  # pending | partial | released
+    amount_released    = Column(Integer, nullable=True)
+    last_release_date  = Column(DateTime(timezone=True), nullable=True)
+    next_release_date  = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

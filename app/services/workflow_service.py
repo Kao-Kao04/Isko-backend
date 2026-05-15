@@ -130,6 +130,30 @@ def _sch_name(app: Application) -> str:
     return app.scholarship.name if app.scholarship else "the scholarship"
 
 
+def _student_name(app: Application) -> str:
+    if app.student and app.student.student_profile:
+        p = app.student.student_profile
+        return f"{p.first_name} {p.last_name}"
+    return f"Student #{app.student_id}"
+
+
+async def _notify_osfa_staff(db: AsyncSession, app: Application, title: str, body: str) -> None:
+    """Notify all active OSFA staff who manage this scholarship's category."""
+    from app.services.notification_service import create_notification
+    if not app.scholarship:
+        return
+    category = app.scholarship.category
+    result = await db.execute(
+        select(User).where(
+            User.role == UserRole.osfa_staff,
+            User.is_active == True,
+            User.department == category,
+        )
+    )
+    for staff in result.scalars().all():
+        await create_notification(db, staff.id, title, body, app.id)
+
+
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 async def initialize_workflow(db: AsyncSession, application_id: int, actor: User) -> Application:
@@ -255,9 +279,17 @@ async def schedule_interview(
     note: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
-    _assert_student_owns(app, actor)
+    # Students can only schedule their own; OSFA can schedule for their dept
+    if actor.role == UserRole.student:
+        _assert_student_owns(app, actor)
+    else:
+        _assert_dept(app, actor)
 
-    if app.sub_status not in (SubStatus.NOT_SCHEDULED, SubStatus.RESCHEDULED):
+    if actor.role == UserRole.osfa_staff or actor.role == UserRole.super_admin:
+        allowed_states = (SubStatus.NOT_SCHEDULED, SubStatus.RESCHEDULED, SubStatus.SCHEDULED)
+    else:
+        allowed_states = (SubStatus.NOT_SCHEDULED, SubStatus.RESCHEDULED)
+    if app.sub_status not in allowed_states:
         raise ValidationError(f"Cannot schedule interview from state {app.sub_status}")
 
     if interview_datetime <= _now():
@@ -274,11 +306,14 @@ async def schedule_interview(
         f"Your interview for {_sch_name(app)} has been scheduled on {interview_datetime.strftime('%B %d, %Y at %I:%M %p')}.",
         app.id,
     )
+    if actor.role == UserRole.student:
+        await _notify_osfa_staff(db, app, "Interview Scheduled by Student",
+            f"{_student_name(app)} scheduled their interview for {_sch_name(app)} on {interview_datetime.strftime('%B %d, %Y at %I:%M %p')}.")
     return await _commit_and_notify(db, app, notif)
 
 
 async def reschedule_interview(
-    db: AsyncSession, application_id: int, actor: User, reason: str,
+    db: AsyncSession, application_id: int, actor: User, reason: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
     _assert_student_owns(app, actor)
@@ -286,6 +321,8 @@ async def reschedule_interview(
     if app.sub_status not in (SubStatus.SCHEDULED, SubStatus.RESCHEDULED):
         raise ValidationError("Can only reschedule a SCHEDULED or RESCHEDULED interview.")
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.RESCHEDULED, reason)
+    await _notify_osfa_staff(db, app, "Reschedule Requested",
+        f"{_student_name(app)} requested an interview reschedule for {_sch_name(app)}.")
     notif = _queue_notification(
         db, app.student_id,
         "Interview Rescheduled",
@@ -430,6 +467,8 @@ async def submit_completion_requirements(
 
     await _apply(db, app, actor, MainStatus.COMPLETION, SubStatus.REQUIREMENTS_SUBMITTED)
     app.completion_submitted_at = _now()
+    await _notify_osfa_staff(db, app, "Requirements Submitted",
+        f"{_student_name(app)} submitted completion requirements for {_sch_name(app)}.")
     return await _commit_and_notify(db, app)
 
 

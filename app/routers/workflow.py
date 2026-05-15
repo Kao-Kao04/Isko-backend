@@ -186,7 +186,7 @@ async def schedule_interview(
 @router.post("/{application_id}/reschedule-interview", status_code=200)
 async def reschedule_interview(
     application_id: int,
-    data: RescheduleInterviewRequest,
+    data: RescheduleInterviewRequest = Body(default=RescheduleInterviewRequest()),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

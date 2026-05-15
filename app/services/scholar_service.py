@@ -12,8 +12,14 @@ async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Sch
     return list(result.scalars().all())
 
 
-async def list_scholars(db: AsyncSession, page: int, page_size: int):
+async def list_scholars(db: AsyncSession, user: User | None, page: int, page_size: int):
+    from app.models.scholarship import Scholarship
+    from app.models.user import UserRole
     q = select(Scholar)
+    if user and user.role == UserRole.osfa_staff and user.department:
+        q = q.join(Scholarship, Scholar.scholarship_id == Scholarship.id).where(
+            Scholarship.category == user.department.value
+        )
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()
     q = q.offset((page - 1) * page_size).limit(page_size)

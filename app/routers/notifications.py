@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_super_admin
+from app.dependencies import get_current_user, require_super_admin, require_osfa_or_admin
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
 
@@ -54,6 +54,30 @@ async def broadcast(
     db: AsyncSession = Depends(get_db),
 ):
     count = await notification_service.broadcast_announcement(db, data.title, data.body)
+    return {"message": f"Announcement sent to {count} students."}
+
+
+class AnnounceRequest(BaseModel):
+    title: str = Field(..., max_length=200)
+    body: str = Field(..., max_length=2000)
+    target: str = "all"  # all | by_scholarship | by_status | selected
+    scholarship_id: int | None = None
+    status_filter: str | None = None
+    student_ids: list[int] | None = None
+
+
+@router.post("/announce", status_code=200)
+async def announce(
+    data: AnnounceRequest,
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    count = await notification_service.send_announcement(
+        db, data.title, data.body, data.target,
+        scholarship_id=data.scholarship_id,
+        status_filter=data.status_filter,
+        student_ids=data.student_ids,
+    )
     return {"message": f"Announcement sent to {count} students."}
 
 

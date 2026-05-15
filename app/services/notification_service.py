@@ -76,6 +76,47 @@ async def mark_all_read(db: AsyncSession, user_id: int) -> None:
     await db.commit()
 
 
+async def send_announcement(
+    db: AsyncSession,
+    title: str,
+    body: str,
+    target: str = "all",
+    scholarship_id: int | None = None,
+    status_filter: str | None = None,
+    student_ids: list[int] | None = None,
+) -> int:
+    from sqlalchemy import insert as _insert
+    from app.models.application import Application as _App, ApplicationStatus as _AS
+    if target == "selected" and student_ids:
+        ids = student_ids
+    elif target == "by_scholarship" and scholarship_id:
+        rows = await db.execute(
+            select(User.id).join(_App, _App.student_id == User.id).where(
+                _App.scholarship_id == scholarship_id, User.role == UserRole.student,
+            ).distinct()
+        )
+        ids = list(rows.scalars().all())
+    elif target == "by_status" and status_filter:
+        try:
+            st = _AS(status_filter)
+            rows = await db.execute(
+                select(User.id).join(_App, _App.student_id == User.id).where(
+                    _App.status == st, User.role == UserRole.student,
+                ).distinct()
+            )
+            ids = list(rows.scalars().all())
+        except ValueError:
+            ids = []
+    else:
+        rows = await db.execute(select(User.id).where(User.role == UserRole.student, User.is_active == True))
+        ids = list(rows.scalars().all())
+    if not ids:
+        return 0
+    await db.execute(_insert(Notification), [{"user_id": uid, "title": title, "body": body} for uid in ids])
+    await db.commit()
+    return len(ids)
+
+
 async def dismiss(db: AsyncSession, user_id: int, notification_id: int) -> None:
     result = await db.execute(
         select(Notification).where(Notification.id == notification_id, Notification.user_id == user_id)

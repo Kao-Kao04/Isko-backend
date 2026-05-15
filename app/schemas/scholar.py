@@ -55,6 +55,13 @@ class ScholarStatusUpdate(BaseModel):
     reason: str | None = None
 
 
+class AllowanceUpdate(BaseModel):
+    allowance_status: str | None = None   # pending | partial | released
+    amount_released: int | None = None
+    last_release_date: datetime | None = None
+    next_release_date: datetime | None = None
+
+
 class ScholarResponse(BaseModel):
     id: int
     application_id: int
@@ -63,6 +70,10 @@ class ScholarResponse(BaseModel):
     status: ScholarStatus
     is_graduating: bool
     expected_graduation: str | None
+    allowance_status: str
+    amount_released: int | None
+    last_release_date: datetime | None
+    next_release_date: datetime | None
     created_at: datetime
     semester_records: List[SemesterRecordResponse] = []
     status_logs: List[ScholarStatusLogResponse] = []
