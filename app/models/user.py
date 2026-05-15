@@ -58,6 +58,23 @@ class StudentProfile(Base):
     program = Column(String, nullable=False)
     year_level = Column(Integer, nullable=False)
     gwa = Column(String)
+
+    # Address
+    street_barangay   = Column(String, nullable=True)
+    city_municipality = Column(String, nullable=True)
+    province          = Column(String, nullable=True)
+    zip_code          = Column(String, nullable=True)
+
+    # Parents
+    father_name       = Column(String, nullable=True)
+    father_occupation = Column(String, nullable=True)
+    mother_name       = Column(String, nullable=True)
+    mother_occupation = Column(String, nullable=True)
+
+    # Family income
+    income_source     = Column(String, nullable=True)
+    monthly_income    = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -23,6 +23,16 @@ async def submit_registration(
     cor_path: str,
     cor_filename: str,
     cor_content_type: str,
+    street_barangay:   str | None = None,
+    city_municipality: str | None = None,
+    province:          str | None = None,
+    zip_code:          str | None = None,
+    father_name:       str | None = None,
+    father_occupation: str | None = None,
+    mother_name:       str | None = None,
+    mother_occupation: str | None = None,
+    income_source:     str | None = None,
+    monthly_income:    str | None = None,
 ) -> User:
     if user.account_status not in (AccountStatus.unregistered, AccountStatus.rejected):
         raise ForbiddenError("You have already submitted your registration documents")
@@ -53,6 +63,18 @@ async def submit_registration(
     # Upsert StudentProfile
     result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == user.id))
     profile = result.scalar_one_or_none()
+    extra = dict(
+        street_barangay=street_barangay,
+        city_municipality=city_municipality,
+        province=province,
+        zip_code=zip_code,
+        father_name=father_name,
+        father_occupation=father_occupation,
+        mother_name=mother_name,
+        mother_occupation=mother_occupation,
+        income_source=income_source,
+        monthly_income=monthly_income,
+    )
     if profile:
         profile.student_number = student_number
         profile.first_name = first_name
@@ -61,6 +83,8 @@ async def submit_registration(
         profile.college = college
         profile.program = program
         profile.year_level = year_level
+        for k, v in extra.items():
+            setattr(profile, k, v)
     else:
         profile = StudentProfile(
             user_id=user.id,
@@ -71,6 +95,7 @@ async def submit_registration(
             college=college,
             program=program,
             year_level=year_level,
+            **extra,
         )
         db.add(profile)
 

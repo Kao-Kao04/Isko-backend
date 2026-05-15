@@ -13,6 +13,19 @@ class StudentProfileResponse(BaseModel):
     program: str
     year_level: int
     gwa: str | None
+    # Address
+    street_barangay:   str | None = None
+    city_municipality: str | None = None
+    province:          str | None = None
+    zip_code:          str | None = None
+    # Parents
+    father_name:       str | None = None
+    father_occupation: str | None = None
+    mother_name:       str | None = None
+    mother_occupation: str | None = None
+    # Family income
+    income_source:     str | None = None
+    monthly_income:    str | None = None
 
     model_config = {"from_attributes": True}
 
