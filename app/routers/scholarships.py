@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -77,3 +78,13 @@ async def duplicate_scholarship(
     db: AsyncSession = Depends(get_db),
 ):
     return await scholarship_service.duplicate_scholarship(db, scholarship_id, current_user)
+
+
+@router.get("/{scholarship_id}/report", response_class=HTMLResponse)
+async def scholarship_report(
+    scholarship_id: int,
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    html = await scholarship_service.generate_report_html(db, scholarship_id)
+    return HTMLResponse(content=html)
