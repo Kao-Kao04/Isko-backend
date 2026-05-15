@@ -285,6 +285,28 @@ async def update_application_status(
     title, body = notif_map[data.status]
     await create_notification(db, app.student_id, title, body, app.id)
 
+    # Notify all OSFA staff in the same department so the team is aware (#11)
+    if scholarship and scholarship.category:
+        from app.models.user import UserRole as _Role
+        staff_result = await db.execute(
+            select(User).where(
+                User.role == _Role.osfa_staff,
+                User.is_active == True,
+                User.department == scholarship.category,
+            )
+        )
+        student_result = await db.execute(select(User).where(User.id == app.student_id))
+        student = student_result.scalar_one_or_none()
+        student_label = student.email if student else f"Student #{app.student_id}"
+        osfa_notif_map = {
+            ApplicationStatus.approved:    f"Application approved: {student_label} — {sch_name}",
+            ApplicationStatus.rejected:    f"Application rejected: {student_label} — {sch_name}",
+            ApplicationStatus.incomplete:  f"Application marked incomplete: {student_label} — {sch_name}",
+        }
+        for s in staff_result.scalars().all():
+            if s.id != staff.id:  # don't notify the person who took the action
+                await create_notification(db, s.id, title, osfa_notif_map[data.status], app.id)
+
     # Send email for rejection and incomplete — critical events the student may miss in-app
     if data.status in (ApplicationStatus.rejected, ApplicationStatus.incomplete):
         from app.models.user import User as _User
@@ -344,14 +366,21 @@ async def file_appeal(db: AsyncSession, application_id: int, data: AppealCreate,
     if app.student_id != student.id:
         raise ForbiddenError()
 
-    # Support appeal for both legacy rejection and workflow decision rejection
-    is_legacy_rejected = app.status == ApplicationStatus.rejected
-    is_workflow_rejected = (
-        app.main_status == MainStatus.DECISION
+    # #14: Appeals allowed only for Application/Verification-stage rejections.
+    # Decision-stage rejection is final — no appeal.
+    is_early_workflow_rejection = (
+        app.main_status == MainStatus.REJECTED        # terminal rejection from Application or Verification screening
         and app.sub_status == SubStatus.REJECTED
     )
-    if not is_legacy_rejected and not is_workflow_rejected:
-        raise ValidationError("Can only appeal Rejected applications")
+    is_legacy_early_rejection = (
+        app.status == ApplicationStatus.rejected
+        and app.main_status not in (MainStatus.DECISION,)
+    )
+    if not is_early_workflow_rejection and not is_legacy_early_rejection:
+        raise ValidationError(
+            "Appeals are only allowed for Application or Verification stage rejections. "
+            "Decision-stage rejections are final."
+        )
 
     existing = await db.execute(select(Appeal).where(Appeal.application_id == application_id))
     if existing.scalar_one_or_none():
@@ -359,6 +388,31 @@ async def file_appeal(db: AsyncSession, application_id: int, data: AppealCreate,
 
     appeal = Appeal(application_id=application_id, student_id=student.id, reason=data.reason)
     db.add(appeal)
+
+    # #12: Notify OSFA staff that a student filed an appeal
+    sch_result = await db.execute(select(Scholarship).where(Scholarship.id == app.scholarship_id))
+    scholarship = sch_result.scalar_one_or_none()
+    if scholarship and scholarship.category:
+        from app.models.user import UserRole as _Role
+        staff_result = await db.execute(
+            select(User).where(
+                User.role == _Role.osfa_staff,
+                User.is_active == True,
+                User.department == scholarship.category,
+            )
+        )
+        student_label = student.email
+        if student.student_profile:
+            student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}"
+        sch_name = scholarship.name if scholarship else "a scholarship"
+        for s in staff_result.scalars().all():
+            await create_notification(
+                db, s.id,
+                "Appeal Filed",
+                f"{student_label} filed an appeal for {sch_name}: {data.reason[:120]}{'…' if len(data.reason) > 120 else ''}",
+                app.id,
+            )
+
     await db.commit()
     await db.refresh(appeal)
     return appeal
