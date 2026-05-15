@@ -250,8 +250,8 @@ async def complete_verification(
         app.status = ApplicationStatus.rejected
         notif = _queue_notification(
             db, app.student_id,
-            "Application Rejected",
-            f"Your application for {_sch_name(app)} was rejected during document verification.",
+            "Thank You for Your Application",
+            f"Thank you for applying for {_sch_name(app)}. After reviewing your submitted documents, we regret that we are unable to proceed with your application at this time. We encourage you to keep applying in future scholarship cycles.",
             app.id,
         )
         return await _commit_and_notify(db, app, notif)
@@ -406,8 +406,8 @@ async def release_decision(
         app.status = ApplicationStatus.rejected
         notif = _queue_notification(
             db, app.student_id,
-            "Application Decision: Not Selected",
-            f"We regret to inform you that your application for {_sch_name(app)} was not selected. {remarks or ''}".strip(),
+            "Thank You for Your Application",
+            (f"Thank you for taking the time to apply for {_sch_name(app)}. After careful deliberation, we regret to inform you that you were not selected as a recipient for this cycle. We appreciate your effort and encourage you to apply again in the future. {remarks}".strip() if remarks else f"Thank you for taking the time to apply for {_sch_name(app)}. After careful deliberation, we regret to inform you that you were not selected as a recipient for this cycle. We appreciate your effort and encourage you to apply again in the future."),
             app.id,
         )
         return await _commit_and_notify(db, app, notif)

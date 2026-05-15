@@ -279,7 +279,7 @@ async def update_application_status(
 
     notif_map = {
         ApplicationStatus.approved: ("Application Approved", f"Congratulations! Your application for {sch_name} has been approved."),
-        ApplicationStatus.rejected: ("Application Rejected", f"Your application for {sch_name} has been rejected."),
+        ApplicationStatus.rejected: ("Thank You for Your Application", f"Thank you for applying for {sch_name}. After careful review, we regret that your application was not successful at this time. We encourage you to apply again in future scholarship cycles."),
         ApplicationStatus.incomplete: ("Application Incomplete", f"Your application for {sch_name} requires additional documents."),
     }
     title, body = notif_map[data.status]
