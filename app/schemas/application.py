@@ -69,6 +69,19 @@ class ApplicationStudentInfo(BaseModel):
     college: str | None = None
     program: str | None = None
     year_level: int | None = None
+    # Address
+    street_barangay:   str | None = None
+    city_municipality: str | None = None
+    province:          str | None = None
+    zip_code:          str | None = None
+    # Parents
+    father_name:       str | None = None
+    father_occupation: str | None = None
+    mother_name:       str | None = None
+    mother_occupation: str | None = None
+    # Family income
+    income_source:     str | None = None
+    monthly_income:    str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -86,6 +99,16 @@ class ApplicationStudentInfo(BaseModel):
                 'college':        p.college,
                 'program':        p.program,
                 'year_level':     p.year_level,
+                'street_barangay':   p.street_barangay,
+                'city_municipality': p.city_municipality,
+                'province':          p.province,
+                'zip_code':          p.zip_code,
+                'father_name':       p.father_name,
+                'father_occupation': p.father_occupation,
+                'mother_name':       p.mother_name,
+                'mother_occupation': p.mother_occupation,
+                'income_source':     p.income_source,
+                'monthly_income':    p.monthly_income,
             }
         return data
 
