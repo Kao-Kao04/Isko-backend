@@ -232,6 +232,64 @@ async def list_students(
     return paginate(users, total, page, page_size)
 
 
+@router.patch("/students/{student_id}/toggle-active", status_code=200)
+async def toggle_student_active(
+    student_id: int,
+    actor: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(User.id == student_id, User.role == UserRole.student)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        from app.exceptions import NotFoundError
+        raise NotFoundError("Student", student_id)
+    user.is_active = not user.is_active
+    await db.commit()
+    action = "reactivate_student" if user.is_active else "deactivate_student"
+    await log_system_audit(db, actor.id, "user", action, entity_id=student_id,
+                           before_state={"is_active": not user.is_active},
+                           after_state={"is_active": user.is_active})
+    return {"id": user.id, "is_active": user.is_active,
+            "message": f"Account {'reactivated' if user.is_active else 'deactivated'} successfully."}
+
+
+@router.delete("/students/{student_id}", status_code=204)
+async def delete_student(
+    student_id: int,
+    actor: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(User.id == student_id, User.role == UserRole.student)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        from app.exceptions import NotFoundError
+        raise NotFoundError("Student", student_id)
+
+    # Block deletion if the student has non-withdrawn applications
+    from app.models.application import Application, ApplicationStatus
+    from app.exceptions import ValidationError
+    app_count = (await db.execute(
+        select(func.count(Application.id)).where(
+            Application.student_id == student_id,
+            Application.status.notin_([ApplicationStatus.withdrawn]),
+        )
+    )).scalar()
+    if app_count > 0:
+        raise ValidationError(
+            f"Cannot delete this student — they have {app_count} active application(s). "
+            "Deactivate the account instead."
+        )
+
+    await log_system_audit(db, actor.id, "user", "delete_student", entity_id=student_id,
+                           before_state={"email": user.email}, after_state=None)
+    await db.delete(user)
+    await db.commit()
+
+
 # ── Audit logs ───────────────────────────────────────────────────────────────
 
 @router.get("/audit")
