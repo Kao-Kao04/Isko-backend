@@ -78,9 +78,6 @@ async def _auto_close_expired(db: AsyncSession) -> None:
 
 
 async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: int):
-    # Auto-close expired / fully-booked scholarships before listing
-    await _auto_close_expired(db)
-
     base = select(Scholarship)
     if user.role == UserRole.student:
         base = base.where(Scholarship.status == ScholarshipStatus.active)

@@ -79,6 +79,28 @@ async def _warm_token_blacklist() -> None:
             await load_from_db(db)
     except Exception as exc:
         logger.warning("Could not load revoked tokens on startup: %s", exc)
+
+
+async def _auto_close_loop() -> None:
+    """Background task: close expired/full scholarships every hour."""
+    import asyncio
+    from app.database import AsyncSessionLocal
+    from app.services.scholarship_service import _auto_close_expired
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                await _auto_close_expired(db)
+        except Exception as exc:
+            logger.warning("Auto-close scholarships task failed: %s", exc)
+        await asyncio.sleep(3600)
+
+
+@app.on_event("startup")
+async def _start_background_tasks() -> None:
+    import asyncio
+    asyncio.create_task(_auto_close_loop())
+
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

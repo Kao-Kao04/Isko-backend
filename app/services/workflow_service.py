@@ -5,11 +5,14 @@ Every status transition goes through transition() — no direct status writes al
 All transitions are logged in workflow_logs for full auditability.
 """
 from datetime import datetime, timezone
+from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.application import Application, WorkflowLog, CompletionRequirement
+from app.models.application import Application, ApplicationStatus, WorkflowLog, CompletionRequirement
 from app.models.notification import Notification
+from app.models.scholar import Scholar, ScholarStatus, ScholarStatusLog
+from app.models.scholarship import ComplianceDocumentType
 from app.models.workflow import MainStatus, SubStatus, ALLOWED_TRANSITIONS, can_transition, is_terminal
 from app.models.user import User, UserRole
 from app.exceptions import ValidationError, NotFoundError, ForbiddenError
@@ -186,7 +189,6 @@ async def complete_screening(
         await _apply(db, app, actor, MainStatus.APPLICATION, SubStatus.SCREENING_FAILED, note)
         await _apply(db, app, actor, MainStatus.REJECTED, SubStatus.REJECTED, note)
         app.closed_at = _now()
-        from app.models.application import ApplicationStatus
         app.status = ApplicationStatus.rejected
         notif = _queue_notification(
             db, app.student_id,
@@ -216,7 +218,6 @@ async def request_revision(
     app = await _get_app(db, application_id)
     _assert_dept(app, actor)
     await _apply(db, app, actor, MainStatus.VERIFICATION, SubStatus.REVISION_REQUESTED, note)
-    from app.models.application import ApplicationStatus
     app.status = ApplicationStatus.incomplete
     notif = _queue_notification(
         db, app.student_id,
@@ -246,7 +247,6 @@ async def complete_verification(
         await _apply(db, app, actor, MainStatus.VERIFICATION, SubStatus.VALIDATION_FAILED, note)
         await _apply(db, app, actor, MainStatus.REJECTED, SubStatus.REJECTED, note)
         app.closed_at = _now()
-        from app.models.application import ApplicationStatus
         app.status = ApplicationStatus.rejected
         notif = _queue_notification(
             db, app.student_id,
@@ -379,7 +379,7 @@ async def release_decision(
     db: AsyncSession,
     application_id: int,
     actor: User,
-    decision: str,
+    decision: Literal["approved", "rejected", "waitlisted"],
     remarks: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
@@ -398,8 +398,6 @@ async def release_decision(
     app.decision_released_at = _now()
     if remarks:
         app.decision_remarks = remarks
-
-    from app.models.application import ApplicationStatus
 
     if decision == "rejected":
         app.closed_at = _now()
@@ -422,8 +420,6 @@ async def release_decision(
         return await _commit_and_notify(db, app, notif)
 
     # Approved: create Scholar record and auto-progress to COMPLETION
-    from app.models.scholar import Scholar
-    from sqlalchemy.exc import IntegrityError
     existing = await db.execute(select(Scholar).where(Scholar.application_id == app.id))
     if not existing.scalar_one_or_none():
         db.add(Scholar(
@@ -481,18 +477,15 @@ async def finalize(
         raise ValidationError("Requirements must be submitted before finalizing.")
 
     # Verify all required compliance docs are verified before finalizing
-    from app.models.application import CompletionRequirement
-    from app.models.scholarship import ComplianceDocumentType
-    from sqlalchemy import select as _select
     required_types = (await db.execute(
-        _select(ComplianceDocumentType.name).where(
+        select(ComplianceDocumentType.name).where(
             ComplianceDocumentType.scholarship_id == app.scholarship_id,
             ComplianceDocumentType.is_required == True,
         )
     )).scalars().all()
     if required_types:
         unverified = (await db.execute(
-            _select(CompletionRequirement).where(
+            select(CompletionRequirement).where(
                 CompletionRequirement.application_id == application_id,
                 CompletionRequirement.requirement_type.in_(required_types),
                 CompletionRequirement.is_verified == False,
@@ -506,9 +499,8 @@ async def finalize(
     app.closed_at = _now()
 
     # Auto-activate the scholar record
-    from app.models.scholar import Scholar, ScholarStatus, ScholarStatusLog
     scholar_result = await db.execute(
-        _select(Scholar).where(Scholar.application_id == application_id)
+        select(Scholar).where(Scholar.application_id == application_id)
     )
     scholar = scholar_result.scalar_one_or_none()
     if scholar and scholar.status == ScholarStatus.active:
@@ -545,7 +537,6 @@ async def withdraw(
     app.main_status = MainStatus.WITHDRAWN
     app.sub_status = SubStatus.WITHDRAWN
     app.closed_at = _now()
-    from app.models.application import ApplicationStatus
     app.status = ApplicationStatus.withdrawn
     return await _commit_and_notify(db, app)
 

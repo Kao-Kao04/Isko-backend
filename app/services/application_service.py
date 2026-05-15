@@ -256,6 +256,15 @@ async def update_application_status(
 ) -> Application:
     app = await _get_application(db, application_id)
     _check_department_ownership(app, staff)
+
+    # Block the legacy status endpoint once the new workflow has been initialized.
+    # All state changes must go through /api/workflow/* from that point on.
+    if app.main_status is not None:
+        raise ValidationError(
+            "This application is managed by the workflow system. "
+            "Use the /api/workflow endpoints to update its status."
+        )
+
     old_status = app.status
 
     allowed_transitions = {
