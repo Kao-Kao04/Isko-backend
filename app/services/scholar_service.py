@@ -14,17 +14,35 @@ async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Sch
 
 async def list_scholars(db: AsyncSession, user: User | None, page: int, page_size: int):
     from app.models.scholarship import Scholarship
-    from app.models.user import UserRole
-    q = select(Scholar)
-    if user and user.role == UserRole.osfa_staff and user.department:
-        q = q.join(Scholarship, Scholar.scholarship_id == Scholarship.id).where(
-            Scholarship.category == user.department.value
+    from app.models.user import UserRole, StudentProfile
+
+    sch_alias = Scholarship.__table__.alias("sch")
+    sp_alias  = StudentProfile.__table__.alias("sp")
+
+    q = (
+        select(
+            Scholar,
+            (sp_alias.c.first_name + " " + sp_alias.c.last_name).label("student_name"),
+            sch_alias.c.name.label("scholarship_name"),
         )
+        .outerjoin(sp_alias,  sp_alias.c.user_id == Scholar.student_id)
+        .outerjoin(sch_alias, sch_alias.c.id == Scholar.scholarship_id)
+    )
+    if user and user.role == UserRole.osfa_staff and user.department:
+        q = q.where(sch_alias.c.category == user.department.value)
+
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()
     q = q.offset((page - 1) * page_size).limit(page_size)
-    result = await db.execute(q)
-    return result.scalars().all(), total
+    rows = (await db.execute(q)).all()
+
+    scholars = []
+    for row in rows:
+        s = row[0]
+        s.student_name    = row[1]
+        s.scholarship_name = row[2]
+        scholars.append(s)
+    return scholars, total
 
 
 async def get_scholar(db: AsyncSession, scholar_id: int) -> Scholar:

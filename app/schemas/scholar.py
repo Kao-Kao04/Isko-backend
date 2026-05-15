@@ -67,6 +67,8 @@ class ScholarResponse(BaseModel):
     application_id: int
     student_id: int
     scholarship_id: int
+    student_name: str | None = None
+    scholarship_name: str | None = None
     status: ScholarStatus
     is_graduating: bool
     expected_graduation: str | None
