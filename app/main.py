@@ -95,10 +95,63 @@ async def _auto_close_loop() -> None:
         await asyncio.sleep(3600)
 
 
+async def _reminder_loop() -> None:
+    """Background task: send pending-action reminders to students every 24 hours."""
+    import asyncio
+    from datetime import datetime, timezone, timedelta
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.application import Application
+    from app.models.user import User
+    from app.models.workflow import SubStatus
+    from app.utils.email import send_reminder_email
+
+    while True:
+        await asyncio.sleep(86400)  # run once per day
+        try:
+            async with AsyncSessionLocal() as db:
+                now = datetime.now(timezone.utc)
+                cutoff = now - timedelta(days=3)
+                q = (
+                    select(Application)
+                    .options(
+                        selectinload(Application.student).selectinload(User.student_profile),
+                        selectinload(Application.scholarship),
+                    )
+                    .where(Application.sub_status.in_([
+                        SubStatus.NOT_SCHEDULED,
+                        SubStatus.REVISION_REQUESTED,
+                        SubStatus.PENDING_REQUIREMENTS,
+                    ]))
+                    .where(Application.updated_at < cutoff)
+                )
+                apps = (await db.execute(q)).scalars().all()
+                for a in apps:
+                    if not a.student:
+                        continue
+                    p = a.student.student_profile
+                    name = f"{p.first_name} {p.last_name}".strip() if p else "Student"
+                    sch_name = a.scholarship.name if a.scholarship else "your scholarship"
+                    if a.sub_status == SubStatus.NOT_SCHEDULED:
+                        reminder_type = "schedule_interview"
+                    elif a.sub_status == SubStatus.REVISION_REQUESTED:
+                        reminder_type = "submit_revision"
+                    else:
+                        reminder_type = "submit_completion"
+                    try:
+                        await send_reminder_email(a.student.email, name, sch_name, reminder_type)
+                    except Exception as exc:
+                        logger.warning("Reminder email failed for app %d: %s", a.id, exc)
+        except Exception as exc:
+            logger.warning("Reminder loop failed: %s", exc)
+
+
 @app.on_event("startup")
 async def _start_background_tasks() -> None:
     import asyncio
     asyncio.create_task(_auto_close_loop())
+    asyncio.create_task(_reminder_loop())
 
 
 app.state.limiter = limiter

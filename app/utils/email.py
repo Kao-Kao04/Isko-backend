@@ -101,6 +101,50 @@ async def send_scholar_terminated_email(to_email: str, reason: str | None = None
     )
 
 
+async def send_reminder_email(to_email: str, student_name: str, scholarship_name: str, reminder_type: str) -> None:
+    messages = {
+        "schedule_interview": (
+            f"Action Required: Schedule Your Interview — {scholarship_name}",
+            f"Hi {student_name}, your application for <strong>{scholarship_name}</strong> is ready for interview scheduling. "
+            f"Please log in to IskoMo and select your preferred interview slot as soon as possible.",
+        ),
+        "submit_revision": (
+            f"Action Required: Resubmit Documents — {scholarship_name}",
+            f"Hi {student_name}, OSFA has requested revisions on your application for <strong>{scholarship_name}</strong>. "
+            f"Please log in to IskoMo and re-upload your documents to continue.",
+        ),
+        "submit_completion": (
+            f"Action Required: Submit Completion Documents — {scholarship_name}",
+            f"Hi {student_name}, congratulations on your scholarship approval for <strong>{scholarship_name}</strong>! "
+            f"Please log in to IskoMo and submit your completion requirements to finalize your scholar onboarding.",
+        ),
+        "deadline_approaching": (
+            f"Reminder: Scholarship Deadline Approaching — {scholarship_name}",
+            f"Hi {student_name}, the application deadline for <strong>{scholarship_name}</strong> is approaching. "
+            f"Make sure your application is complete and all required documents are uploaded.",
+        ),
+    }
+    subject, body = messages.get(reminder_type, (f"IskoMo Reminder — {scholarship_name}", f"Hi {student_name}, you have a pending action on your IskoMo application."))
+    await _send(
+        to_email=to_email,
+        subject=subject,
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">IskoMo — Action Required</h2>
+            <p>{body}</p>
+            <a href="{settings.FRONTEND_URL}/student/applications" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                View My Application
+            </a>
+            <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+                Polytechnic University of the Philippines — OSFA
+            </p>
+        </div>
+        """,
+    )
+
+
 async def send_verification_email(to_email: str, token: str) -> None:
     verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
     logger.info("Verification link for %s: %s", to_email, verification_url)
