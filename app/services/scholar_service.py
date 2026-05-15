@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.models.scholar import Scholar, ScholarStatus, SemesterRecord, ScholarStatusLog, SCHOLAR_STATUS_TRANSITIONS
 from app.models.user import User
 from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, SemesterRecordUpdate
@@ -24,6 +25,10 @@ async def list_scholars(db: AsyncSession, user: User | None, page: int, page_siz
             Scholar,
             (sp_alias.c.first_name + " " + sp_alias.c.last_name).label("student_name"),
             sch_alias.c.name.label("scholarship_name"),
+        )
+        .options(
+            selectinload(Scholar.semester_records),
+            selectinload(Scholar.status_logs),
         )
         .outerjoin(sp_alias,  sp_alias.c.user_id == Scholar.student_id)
         .outerjoin(sch_alias, sch_alias.c.id == Scholar.scholarship_id)

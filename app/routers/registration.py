@@ -6,18 +6,10 @@ from app.database import get_db
 from app.dependencies import require_student
 from app.models.user import User
 from app.utils.storage import upload_file, get_signed_url
+from app.utils.file_validation import validate_file_bytes
 from app.services import registration_service
-from app.exceptions import ValidationError
 
 router = APIRouter(prefix="/api/registration", tags=["registration"])
-
-ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png"}
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-
-
-def _validate_file(file: UploadFile) -> None:
-    if file.content_type not in ALLOWED_TYPES:
-        raise ValidationError("Only PDF, JPEG, or PNG files are accepted")
 
 
 @router.post("/submit", status_code=200)
@@ -47,14 +39,11 @@ async def submit_registration(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
-    _validate_file(school_id)
-    _validate_file(cor)
-
     school_id_bytes = await school_id.read()
     cor_bytes = await cor.read()
 
-    if len(school_id_bytes) > MAX_FILE_SIZE or len(cor_bytes) > MAX_FILE_SIZE:
-        raise ValidationError("File size must not exceed 5 MB")
+    validate_file_bytes(school_id_bytes, school_id.filename or "")
+    validate_file_bytes(cor_bytes, cor.filename or "")
 
     school_id_path = await upload_file(school_id_bytes, school_id.filename, school_id.content_type)
     cor_path = await upload_file(cor_bytes, cor.filename, cor.content_type)

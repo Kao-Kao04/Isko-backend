@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:3000"
     ENVIRONMENT: str = "development"
+    SENTRY_DSN: str = ""
 
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"

@@ -41,6 +41,20 @@ logging.config.dictConfig({
 
 logger = logging.getLogger(__name__)
 
+# ── Sentry (no-op when SENTRY_DSN is empty) ──────────────────────────────────
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+        traces_sample_rate=0.1,
+        environment=settings.ENVIRONMENT,
+        send_default_pii=False,
+    )
+    logger.info("Sentry initialised (env=%s)", settings.ENVIRONMENT)
+
 # ── App ───────────────────────────────────────────────────────────────────────
 _is_prod     = settings.ENVIRONMENT == "production"
 _docs_url    = None if _is_prod else "/docs"

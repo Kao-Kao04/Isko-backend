@@ -9,10 +9,8 @@ from app.models.user import UserRole
 from app.models.workflow import SubStatus
 from app.schemas.document import FlagDocsRequest
 from app.utils.storage import upload_file, delete_file
+from app.utils.file_validation import validate_file_bytes
 from app.exceptions import NotFoundError, ForbiddenError, ValidationError
-
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png"}
 MAX_DOCS_PER_APPLICATION = 20
 
 # Workflow substates where students are allowed to upload or delete documents
@@ -48,9 +46,6 @@ async def upload_document(
     if user.role == UserRole.student:
         _assert_student_can_modify_docs(app)
 
-    if file.content_type not in ALLOWED_TYPES:
-        raise ValidationError("Only PDF, JPG, and PNG files are allowed")
-
     doc_count = (await db.execute(
         select(func.count(ApplicationDocument.id))
         .where(ApplicationDocument.application_id == application_id)
@@ -59,8 +54,7 @@ async def upload_document(
         raise ValidationError(f"Maximum {MAX_DOCS_PER_APPLICATION} documents per application")
 
     contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise ValidationError("File exceeds 5 MB limit")
+    validate_file_bytes(contents, file.filename or "")
 
     storage_path = await upload_file(contents, file.filename, file.content_type)
 
