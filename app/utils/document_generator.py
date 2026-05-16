@@ -31,8 +31,9 @@ _BASE_STYLE = """
 _PUP_HEADER = """
 <div class="header">
   <div style="font-weight:bold;font-size:16px;color:#800000;">POLYTECHNIC UNIVERSITY OF THE PHILIPPINES</div>
-  <div class="school">Office of Student Financial Assistance (OSFA)</div>
-  <div class="school">A. Mabini Campus, Sta. Mesa, Manila</div>
+  <div class="school">Office of Scholarship and Financial Assistance (OSFA)</div>
+  <div class="school">W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila</div>
+  <div class="school">Tel: 5335-1764 | 5335-1787 | 5335-1777 Local 339 &nbsp;|&nbsp; scholarship@pup.edu.ph</div>
 </div>
 """
 

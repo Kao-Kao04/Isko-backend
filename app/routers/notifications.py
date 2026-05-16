@@ -64,6 +64,7 @@ class AnnounceRequest(BaseModel):
     scholarship_id: int | None = None
     status_filter: str | None = None
     student_ids: list[int] | None = None
+    link: str | None = Field(None, max_length=500)
 
 
 @router.post("/announce", status_code=200)
@@ -77,6 +78,7 @@ async def announce(
         scholarship_id=data.scholarship_id,
         status_filter=data.status_filter,
         student_ids=data.student_ids,
+        link=data.link,
     )
     return {"message": f"Announcement sent to {count} students."}
 

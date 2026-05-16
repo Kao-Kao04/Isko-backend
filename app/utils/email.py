@@ -89,12 +89,14 @@ async def send_scholar_terminated_email(to_email: str, reason: str | None = None
         html=f"""
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
             <h2 style="color: #800000;">Scholarship Termination Notice</h2>
-            <p>Your scholarship has been terminated by the Office of Student Financial Assistance (OSFA).</p>
+            <p>Your scholarship has been terminated by the Office of Scholarship and Financial Assistance (OSFA).</p>
             {reason_block}
             <p>If you believe this is in error or would like to file an appeal, please contact the OSFA directly
                or log in to <a href="{settings.FRONTEND_URL}">IskoMo</a> to submit an appeal.</p>
             <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
-                Polytechnic University of the Philippines — OSFA
+                Polytechnic University of the Philippines — Office of Scholarship and Financial Assistance (OSFA)<br>
+                W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila<br>
+                Tel: 5335-1764 | 5335-1787 | 5335-1777 Local 339 | scholarship@pup.edu.ph
             </p>
         </div>
         """,
@@ -138,7 +140,9 @@ async def send_reminder_email(to_email: str, student_name: str, scholarship_name
                 View My Application
             </a>
             <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
-                Polytechnic University of the Philippines — OSFA
+                Polytechnic University of the Philippines — Office of Scholarship and Financial Assistance (OSFA)<br>
+                W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila<br>
+                Tel: 5335-1764 | 5335-1787 | 5335-1777 Local 339 | scholarship@pup.edu.ph
             </p>
         </div>
         """,

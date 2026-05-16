@@ -12,8 +12,9 @@ async def create_notification(
     title: str,
     body: str,
     application_id: int | None = None,
+    link: str | None = None,
 ) -> Notification:
-    notif = Notification(user_id=user_id, title=title, body=body, application_id=application_id)
+    notif = Notification(user_id=user_id, title=title, body=body, application_id=application_id, link=link)
     db.add(notif)
     await db.flush()
 
@@ -24,6 +25,7 @@ async def create_notification(
         "title": title,
         "body": body,
         "application_id": application_id,
+        "link": link,
     })
     return notif
 
@@ -84,6 +86,7 @@ async def send_announcement(
     scholarship_id: int | None = None,
     status_filter: str | None = None,
     student_ids: list[int] | None = None,
+    link: str | None = None,
 ) -> int:
     from sqlalchemy import insert as _insert
     from app.models.application import Application as _App, ApplicationStatus as _AS
@@ -112,7 +115,7 @@ async def send_announcement(
         ids = list(rows.scalars().all())
     if not ids:
         return 0
-    await db.execute(_insert(Notification), [{"user_id": uid, "title": title, "body": body} for uid in ids])
+    await db.execute(_insert(Notification), [{"user_id": uid, "title": title, "body": body, "link": link} for uid in ids])
     await db.commit()
     return len(ids)
 
