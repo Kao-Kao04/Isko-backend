@@ -55,7 +55,11 @@ async def list_scholars(db: AsyncSession, user: User | None, page: int, page_siz
 
 
 async def get_scholar(db: AsyncSession, scholar_id: int) -> Scholar:
-    result = await db.execute(select(Scholar).where(Scholar.id == scholar_id))
+    result = await db.execute(
+        select(Scholar)
+        .options(selectinload(Scholar.semester_records), selectinload(Scholar.status_logs))
+        .where(Scholar.id == scholar_id)
+    )
     scholar = result.scalar_one_or_none()
     if not scholar:
         raise NotFoundError("Scholar", scholar_id)
