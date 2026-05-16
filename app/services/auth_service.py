@@ -75,6 +75,16 @@ async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
     return {"dev": False}
 
 
+async def resend_verification_email(email: str) -> None:
+    try:
+        await asyncio.to_thread(
+            _sb().auth.resend,
+            {"type": "signup", "email": email, "options": {"email_redirect_to": f"{settings.FRONTEND_URL}/verify-email"}},
+        )
+    except Exception as exc:
+        logger.warning("Resend verification failed for %s: %s", email, exc)
+
+
 async def verify_email_and_activate(db: AsyncSession, code: str) -> str | None:
     try:
         response = await asyncio.to_thread(

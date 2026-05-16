@@ -34,8 +34,19 @@ class SupabaseResetPasswordRequest(BaseModel):
 class ConfirmEmailTokenRequest(BaseModel):
     access_token: str
 
+class ResendVerificationRequest(BaseModel):
+    email: str
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.post("/resend-verification", status_code=200)
+@limiter.limit("3/minute")
+async def resend_verification(request: Request, data: ResendVerificationRequest):
+    await auth_service.resend_verification_email(data.email)
+    # Always return success to avoid email enumeration
+    return {"message": "If that email is registered and unverified, a new link has been sent."}
 
 
 @router.post("/signup", status_code=200)
