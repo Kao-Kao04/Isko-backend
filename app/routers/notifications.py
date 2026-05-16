@@ -65,6 +65,7 @@ class AnnounceRequest(BaseModel):
     status_filter: str | None = None
     student_ids: list[int] | None = None
     link: str | None = Field(None, max_length=500)
+    image_url: str | None = None
 
 
 @router.post("/announce", status_code=200)
@@ -79,6 +80,7 @@ async def announce(
         status_filter=data.status_filter,
         student_ids=data.student_ids,
         link=data.link,
+        image_url=data.image_url,
     )
     return {"message": f"Announcement sent to {count} students."}
 

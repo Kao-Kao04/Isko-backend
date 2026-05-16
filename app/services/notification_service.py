@@ -87,6 +87,7 @@ async def send_announcement(
     status_filter: str | None = None,
     student_ids: list[int] | None = None,
     link: str | None = None,
+    image_url: str | None = None,
 ) -> int:
     from sqlalchemy import insert as _insert
     from app.models.application import Application as _App, ApplicationStatus as _AS
@@ -115,7 +116,7 @@ async def send_announcement(
         ids = list(rows.scalars().all())
     if not ids:
         return 0
-    await db.execute(_insert(Notification), [{"user_id": uid, "title": title, "body": body, "link": link} for uid in ids])
+    await db.execute(_insert(Notification), [{"user_id": uid, "title": title, "body": body, "link": link, "image_url": image_url} for uid in ids])
     await db.commit()
     return len(ids)
 

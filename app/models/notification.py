@@ -13,7 +13,8 @@ class Notification(Base):
     body = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True)
-    link = Column(String, nullable=True)
+    link      = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="notifications")

@@ -42,7 +42,8 @@ class NotificationResponse(BaseModel):
     body: str
     is_read: bool
     application_id: int | None
-    link: str | None = None
+    link:      str | None = None
+    image_url: str | None = None
     created_at: datetime
 
     # Fields expected by the frontend
