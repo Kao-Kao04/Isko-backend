@@ -45,8 +45,12 @@ async def get_overview(db: AsyncSession, current_user: User) -> dict:
     total_scholars_q = select(func.count(Scholar.id)).where(Scholar.status == ScholarStatus.active)
     active_scholarships_q = select(func.count(Scholarship.id)).where(Scholarship.status == "active")
     if current_user.role == UserRole.osfa_staff and current_user.department:
+        dept_val = current_user.department.value
+        total_scholars_q = total_scholars_q.join(
+            Scholarship, Scholar.scholarship_id == Scholarship.id
+        ).where(Scholarship.category == dept_val)
         active_scholarships_q = active_scholarships_q.where(
-            Scholarship.category == current_user.department.value
+            Scholarship.category == dept_val
         )
 
     return {

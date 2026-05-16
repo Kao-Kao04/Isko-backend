@@ -9,7 +9,11 @@ from app.exceptions import NotFoundError, ValidationError, ForbiddenError
 
 
 async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Scholar]:
-    result = await db.execute(select(Scholar).where(Scholar.student_id == student_id))
+    result = await db.execute(
+        select(Scholar)
+        .options(selectinload(Scholar.semester_records), selectinload(Scholar.status_logs))
+        .where(Scholar.student_id == student_id)
+    )
     return list(result.scalars().all())
 
 
