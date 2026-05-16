@@ -14,22 +14,26 @@ def _derive_type(title: str) -> str:
     return 'info'
 
 
-def _derive_route(title: str, application_id: int | None) -> str | None:
+def _derive_route(title: str, application_id: int | None, link: str | None = None) -> str | None:
     """
     Returns a role-agnostic route. Frontend prepends its base path:
       student → /student + route
       osfa    → /osfa + route
     """
+    if link:
+        return link
     if application_id:
         return f"/applications/{application_id}"
 
     t = title.lower()
+    if 'guideline' in t or 'guidelines' in t or 'announcement' in t:
+        return "/iskolarships"
     if 'deadline' in t or 'scholarship' in t:
-        return "/scholarships"
+        return "/iskolarships"
     if 'registration' in t:
         return "/registrations"
 
-    return "/notifications"
+    return None
 
 
 class NotificationResponse(BaseModel):
@@ -38,6 +42,7 @@ class NotificationResponse(BaseModel):
     body: str
     is_read: bool
     application_id: int | None
+    link: str | None = None
     created_at: datetime
 
     # Fields expected by the frontend
@@ -53,5 +58,5 @@ class NotificationResponse(BaseModel):
         self.message = self.body
         self.read    = self.is_read
         self.type    = _derive_type(self.title)
-        self.route   = _derive_route(self.title, self.application_id)
+        self.route   = _derive_route(self.title, self.application_id, self.link)
         return self
