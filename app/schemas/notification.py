@@ -26,14 +26,14 @@ def _derive_route(title: str, application_id: int | None, link: str | None = Non
         return f"/applications/{application_id}"
 
     t = title.lower()
-    if 'guideline' in t or 'guidelines' in t or 'announcement' in t:
-        return "/iskolarships"
     if 'deadline' in t or 'scholarship' in t:
         return "/iskolarships"
     if 'registration' in t:
         return "/registrations"
 
-    return None
+    # General announcements (guidelines, info, etc.) → go to notifications
+    # so the student can read the full body instead of landing on a generic list page
+    return "/notifications"
 
 
 class NotificationResponse(BaseModel):
