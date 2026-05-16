@@ -5,10 +5,10 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import require_osfa_or_admin, require_student
+from app.dependencies import get_current_user, require_osfa_or_admin, require_student
 from app.models.user import User, UserRole, AccountStatus
 from app.models.registration import RegistrationDocument
-from app.schemas.user import UserResponse, UpdateProfileRequest
+from app.schemas.user import UserResponse, UpdateProfileRequest, PatchProfileRequest
 from app.schemas.common import PaginatedResponse
 from app.utils.pagination import paginate
 import asyncio
@@ -20,6 +20,22 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 class RejectStudentRequest(BaseModel):
     remarks: str
+
+
+@router.patch("/me/profile", response_model=UserResponse)
+async def patch_my_profile(
+    data: PatchProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = current_user.student_profile
+    if not profile:
+        raise NotFoundError("StudentProfile", current_user.id)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(profile, field, value)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
 
 
 @router.put("/me", response_model=UserResponse)

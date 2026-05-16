@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -121,6 +122,28 @@ async def review_appeal(
     db: AsyncSession = Depends(get_db),
 ):
     return await application_service.review_appeal(db, application_id, data, current_user)
+
+
+class InternalNotesRequest(BaseModel):
+    notes: str
+
+@router.patch("/{application_id}/notes", status_code=200)
+async def update_internal_notes(
+    application_id: int,
+    data: InternalNotesRequest,
+    current_user=Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select as _sel
+    from app.models.application import Application as _App
+    result = await db.execute(_sel(_App).where(_App.id == application_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        from app.exceptions import NotFoundError
+        raise NotFoundError("Application", application_id)
+    app.interview_notes = data.notes
+    await db.commit()
+    return {"message": "Notes saved.", "notes": data.notes}
 
 
 @router.get("/{application_id}/audit", response_model=list[AuditEntryResponse])

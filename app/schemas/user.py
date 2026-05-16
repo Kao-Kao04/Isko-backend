@@ -47,3 +47,22 @@ class UserResponse(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     gwa: str | None = None
+
+
+class PatchProfileRequest(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    year_level: int | None = None
+    college: str | None = None
+    program: str | None = None
+    street_barangay: str | None = None
+    city_municipality: str | None = None
+    province: str | None = None
+    zip_code: str | None = None
+    father_name: str | None = None
+    father_occupation: str | None = None
+    mother_name: str | None = None
+    mother_occupation: str | None = None
+    income_source: str | None = None
+    monthly_income: str | None = None
