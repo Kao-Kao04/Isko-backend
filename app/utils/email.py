@@ -1,5 +1,9 @@
 import asyncio
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 import resend
 
 from app.config import settings
@@ -7,9 +11,34 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _send_via_smtp(to_email: str, subject: str, html: str) -> None:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"]    = settings.SMTP_FROM or f"IskoMo <{settings.SMTP_USER}>"
+    msg["To"]      = to_email
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(settings.SMTP_USER, settings.SMTP_PASS)
+        server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+
+
 async def _send(to_email: str, subject: str, html: str) -> None:
+    # Prefer Gmail SMTP if configured
+    if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASS:
+        try:
+            await asyncio.to_thread(_send_via_smtp, to_email, subject, html)
+            logger.info("Email sent via SMTP to %s — %s", to_email, subject)
+            return
+        except Exception as exc:
+            logger.error("SMTP send failed for %s: %s", to_email, exc)
+            raise RuntimeError("Could not send email. Please try again later.") from exc
+
+    # Fallback to Resend
     if not settings.RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY not set — email to %s skipped. Subject: %s", to_email, subject)
+        logger.warning("No email provider configured — email to %s skipped. Subject: %s", to_email, subject)
         return
 
     resend.api_key = settings.RESEND_API_KEY

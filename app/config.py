@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = ""
 
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = ""
+
     CORS_ORIGINS: str = "http://localhost:3000"
     ENVIRONMENT: str = "development"
     SENTRY_DSN: str = ""
