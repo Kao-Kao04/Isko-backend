@@ -29,7 +29,10 @@ async def _get_app(db: AsyncSession, application_id: int) -> Application:
     from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(Application)
-        .options(selectinload(Application.scholarship), selectinload(Application.student))
+        .options(
+            selectinload(Application.scholarship),
+            selectinload(Application.student).selectinload(User.student_profile),
+        )
         .where(Application.id == application_id)
     )
     app = result.scalar_one_or_none()
