@@ -4,10 +4,13 @@ Strict state machine service for scholarship application workflow.
 Every status transition goes through transition() — no direct status writes allowed.
 All transitions are logged in workflow_logs for full auditability.
 """
+import asyncio
 from datetime import datetime, timezone
 from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+from app.config import settings
 
 from app.models.application import Application, ApplicationStatus, WorkflowLog, CompletionRequirement
 from app.models.notification import Notification
@@ -300,15 +303,38 @@ async def schedule_interview(
     app.interview_scheduled_at = _now()
     if location:
         app.interview_location = location
+    dt_str = interview_datetime.strftime('%B %d, %Y at %I:%M %p')
     notif = _queue_notification(
         db, app.student_id,
         "Interview Scheduled",
-        f"Your interview for {_sch_name(app)} has been scheduled on {interview_datetime.strftime('%B %d, %Y at %I:%M %p')}.",
+        f"Your interview for {_sch_name(app)} has been scheduled on {dt_str}.",
         app.id,
     )
     if actor.role == UserRole.student:
         await _notify_osfa_staff(db, app, "Interview Scheduled by Student",
-            f"{_student_name(app)} scheduled their interview for {_sch_name(app)} on {interview_datetime.strftime('%B %d, %Y at %I:%M %p')}.")
+            f"{_student_name(app)} scheduled their interview for {_sch_name(app)} on {dt_str}.")
+    else:
+        # OSFA scheduled — email the student
+        if app.student:
+            from app.utils.email import _send
+            location_line = f"<p><strong>Location:</strong> {app.interview_location}</p>" if app.interview_location else ""
+            asyncio.create_task(_send(
+                app.student.email,
+                f"Interview Scheduled — {_sch_name(app)}",
+                f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+                <h2 style="color:#800000;">Interview Scheduled</h2>
+                <p>Hi {_student_name(app)},</p>
+                <p>Your interview for <strong>{_sch_name(app)}</strong> has been scheduled.</p>
+                <p><strong>Date &amp; Time:</strong> {dt_str}</p>
+                {location_line}
+                <a href="{settings.FRONTEND_URL}/student/applications/{app.id}"
+                   style="display:inline-block;padding:12px 28px;background:#800000;color:#fff;
+                          text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0;">
+                    View Application
+                </a>
+                <p style="color:#6b7280;font-size:13px;">Polytechnic University of the Philippines — OSFA</p>
+                </div>"""
+            ))
     return await _commit_and_notify(db, app, notif)
 
 
@@ -408,6 +434,21 @@ async def release_decision(
             (f"Thank you for taking the time to apply for {_sch_name(app)}. After careful deliberation, we regret to inform you that you were not selected as a recipient for this cycle. We appreciate your effort and encourage you to apply again in the future. {remarks}".strip() if remarks else f"Thank you for taking the time to apply for {_sch_name(app)}. After careful deliberation, we regret to inform you that you were not selected as a recipient for this cycle. We appreciate your effort and encourage you to apply again in the future."),
             app.id,
         )
+        if app.student:
+            from app.utils.email import _send
+            remarks_block = f"<p><strong>Remarks:</strong> {remarks}</p>" if remarks else ""
+            asyncio.create_task(_send(
+                app.student.email,
+                f"Application Update — {_sch_name(app)}",
+                f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+                <h2 style="color:#800000;">Thank You for Applying</h2>
+                <p>Hi {_student_name(app)},</p>
+                <p>Thank you for applying for <strong>{_sch_name(app)}</strong>. After careful deliberation, we regret to inform you that you were not selected as a recipient for this cycle.</p>
+                {remarks_block}
+                <p>We appreciate your effort and encourage you to apply again in the future.</p>
+                <p style="color:#6b7280;font-size:13px;">Polytechnic University of the Philippines — OSFA</p>
+                </div>"""
+            ))
         return await _commit_and_notify(db, app, notif)
 
     if decision == "waitlisted":
@@ -417,6 +458,23 @@ async def release_decision(
             f"Your application for {_sch_name(app)} has been waitlisted. You will be notified if a slot becomes available.",
             app.id,
         )
+        if app.student:
+            from app.utils.email import _send
+            asyncio.create_task(_send(
+                app.student.email,
+                f"Application Waitlisted — {_sch_name(app)}",
+                f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+                <h2 style="color:#800000;">Application Waitlisted</h2>
+                <p>Hi {_student_name(app)},</p>
+                <p>Your application for <strong>{_sch_name(app)}</strong> has been waitlisted. You will be notified if a slot becomes available.</p>
+                <a href="{settings.FRONTEND_URL}/student/applications/{app.id}"
+                   style="display:inline-block;padding:12px 28px;background:#800000;color:#fff;
+                          text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0;">
+                    View Application
+                </a>
+                <p style="color:#6b7280;font-size:13px;">Polytechnic University of the Philippines — OSFA</p>
+                </div>"""
+            ))
         return await _commit_and_notify(db, app, notif)
 
     # Approved: create Scholar record and auto-progress to COMPLETION
@@ -436,6 +494,24 @@ async def release_decision(
         f"Your application for {_sch_name(app)} has been approved! Please submit the required completion documents.",
         app.id,
     )
+    if app.student:
+        from app.utils.email import _send
+        asyncio.create_task(_send(
+            app.student.email,
+            f"Congratulations! Application Approved — {_sch_name(app)}",
+            f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+            <h2 style="color:#800000;">Congratulations!</h2>
+            <p>Hi {_student_name(app)},</p>
+            <p>We are pleased to inform you that your application for <strong>{_sch_name(app)}</strong> has been <strong>approved</strong>!</p>
+            <p>Please log in to IskoMo and submit the required completion documents to finalize your scholar onboarding.</p>
+            <a href="{settings.FRONTEND_URL}/student/applications/{app.id}"
+               style="display:inline-block;padding:12px 28px;background:#800000;color:#fff;
+                      text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0;">
+                Submit Documents
+            </a>
+            <p style="color:#6b7280;font-size:13px;">Polytechnic University of the Philippines — OSFA</p>
+            </div>"""
+        ))
     return await _commit_and_notify(db, app, notif)
 
 
