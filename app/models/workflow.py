@@ -89,6 +89,7 @@ ALLOWED_TRANSITIONS: dict[
         (MainStatus.INTERVIEW, SubStatus.SCHEDULED),
     ],
     (MainStatus.INTERVIEW, SubStatus.SCHEDULED): [
+        (MainStatus.INTERVIEW, SubStatus.SCHEDULED),       # OSFA updates datetime on already-scheduled interview
         (MainStatus.INTERVIEW, SubStatus.RESCHEDULED),
         (MainStatus.INTERVIEW, SubStatus.INTERVIEW_COMPLETED),
     ],
