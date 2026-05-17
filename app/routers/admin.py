@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -296,16 +297,20 @@ async def delete_student(
 async def get_audit_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_super_admin),
 ):
     from sqlalchemy.orm import selectinload
-    query = (
-        select(AuditEntry)
-        .options(selectinload(AuditEntry.actor), selectinload(AuditEntry.application))
-        .order_by(AuditEntry.created_at.desc())
-    )
-    total = (await db.execute(select(func.count(AuditEntry.id)))).scalar()
+    base = select(AuditEntry)
+    if date_from:
+        base = base.where(AuditEntry.created_at >= datetime(date_from.year, date_from.month, date_from.day, tzinfo=timezone.utc))
+    if date_to:
+        next_day = datetime(date_to.year, date_to.month, date_to.day, tzinfo=timezone.utc) + timedelta(days=1)
+        base = base.where(AuditEntry.created_at < next_day)
+    query = base.options(selectinload(AuditEntry.actor), selectinload(AuditEntry.application)).order_by(AuditEntry.created_at.desc())
+    total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar()
     entries = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all()
 
     return {
