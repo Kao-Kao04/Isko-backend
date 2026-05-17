@@ -34,7 +34,10 @@ def _fmt(m: ApplicationMessage) -> dict:
 async def _get_application(application_id: int, db: AsyncSession) -> Application:
     app = (await db.execute(
         select(Application)
-        .options(selectinload(Application.student), selectinload(Application.messages).selectinload(ApplicationMessage.sender))
+        .options(
+            selectinload(Application.student).selectinload(User.student_profile),
+            selectinload(Application.messages).selectinload(ApplicationMessage.sender),
+        )
         .where(Application.id == application_id)
     )).scalar_one_or_none()
     if not app:
@@ -88,9 +91,27 @@ async def send_message(
 
     # Notify the other party
     if current_user.role == UserRole.student:
-        # Notify all OSFA staff — get one staff to notify (or broadcast)
-        # For simplicity, create a notification for the application owner side
-        pass  # OSFA sees unread badge; no personal notification needed
+        # Notify all active OSFA staff
+        student_name = ""
+        if app.student and app.student.student_profile:
+            p = app.student.student_profile
+            student_name = f"{p.first_name} {p.last_name}".strip()
+        else:
+            student_name = app.student.email if app.student else "A student"
+
+        osfa_staff = (await db.execute(
+            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True)
+        )).scalars().all()
+
+        for staff in osfa_staff:
+            await create_notification(
+                db=db,
+                user_id=staff.id,
+                title=f"New message from {student_name}",
+                body=f"Application #{application_id}: {data.body.strip()[:80]}{'…' if len(data.body.strip()) > 80 else ''}",
+                application_id=application_id,
+                link=f"/osfa/applicants/{application_id}",
+            )
     else:
         # OSFA replied — notify the student
         await create_notification(
