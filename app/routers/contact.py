@@ -1,8 +1,10 @@
+import asyncio
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import require_super_admin
 from app.models.message import ContactInquiry
@@ -32,6 +34,31 @@ async def submit_contact(data: ContactRequest, db: AsyncSession = Depends(get_db
     )
     db.add(inquiry)
     await db.commit()
+
+    # Forward inquiry to OSFA inbox via email
+    notify_email = settings.SMTP_USER or settings.RESEND_FROM
+    if notify_email:
+        from app.utils.email import _send
+        subject_line = data.subject.strip() if data.subject else "General Inquiry"
+        asyncio.create_task(_send(
+            notify_email,
+            f"[IskoMo Contact] {subject_line} — from {data.name.strip()}",
+            f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
+            <h2 style="color:#800000;">New Contact Inquiry</h2>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:8px 0;color:#6b7280;width:100px;">From</td><td style="padding:8px 0;font-weight:600;">{data.name.strip()}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;"><a href="mailto:{data.email}">{data.email}</a></td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280;">Subject</td><td style="padding:8px 0;">{subject_line}</td></tr>
+            </table>
+            <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:14px;color:#111827;line-height:1.7;">{data.message.strip().replace(chr(10), '<br>')}</p>
+            </div>
+            <p style="margin-top:20px;font-size:12px;color:#9ca3af;">
+              Reply directly to <a href="mailto:{data.email}">{data.email}</a> to respond to this inquiry.
+            </p>
+            </div>"""
+        ))
+
     return {"message": "Inquiry submitted. We will respond within 3–5 business days."}
 
 
