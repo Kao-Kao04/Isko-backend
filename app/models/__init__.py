@@ -9,3 +9,4 @@ from app.models.appeal import Appeal
 from app.models.system_audit import SystemAuditLog
 from app.models.revoked_token import RevokedToken
 from app.models.registration import RegistrationDocument, RegistrationDocType
+from app.models.message import ApplicationMessage, ContactInquiry

@@ -71,6 +71,7 @@ class Application(Base):
     scholar       = relationship("Scholar", back_populates="application", uselist=False, cascade="all, delete-orphan")
     workflow_logs = relationship("WorkflowLog", back_populates="application", cascade="all, delete-orphan", order_by="WorkflowLog.created_at")
     completion_requirements = relationship("CompletionRequirement", back_populates="application", cascade="all, delete-orphan")
+    messages = relationship("ApplicationMessage", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationMessage.created_at")
 
 
 class WorkflowLog(Base):
