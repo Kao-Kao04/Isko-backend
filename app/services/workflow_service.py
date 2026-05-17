@@ -298,7 +298,11 @@ async def schedule_interview(
     if interview_datetime <= _now():
         raise ValidationError("Interview must be scheduled for a future date and time")
 
-    await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.SCHEDULED, note)
+    # If already SCHEDULED, OSFA is updating the datetime — skip transition check, just update
+    if app.sub_status == SubStatus.SCHEDULED and actor.role in (UserRole.osfa_staff, UserRole.super_admin):
+        await _log(db, app, actor, MainStatus.INTERVIEW, SubStatus.SCHEDULED, note)
+    else:
+        await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.SCHEDULED, note)
     app.interview_datetime = interview_datetime
     app.interview_scheduled_at = _now()
     if location:
