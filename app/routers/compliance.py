@@ -128,8 +128,9 @@ async def release_benefit(
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.scholar_service import release_benefit as _release
+    from app.schemas.scholar import SemesterRecordResponse
     record = await _release(db, scholar_id, record_id, actor)
-    return {"message": "Benefit released successfully.", "benefit_released_at": record.benefit_released_at}
+    return SemesterRecordResponse.model_validate(record)
 
 
 @router.patch("/scholars/{scholar_id}/semester-records/{record_id}/thank-you", status_code=200)
@@ -140,8 +141,9 @@ async def submit_thank_you(
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.scholar_service import submit_thank_you as _submit
+    from app.schemas.scholar import SemesterRecordResponse
     record = await _submit(db, scholar_id, record_id, current_user)
-    return {"message": "Thank you letter recorded.", "thank_you_submitted_at": record.thank_you_submitted_at}
+    return SemesterRecordResponse.model_validate(record)
 
 
 # ── Document generation ───────────────────────────────────────────────────────
