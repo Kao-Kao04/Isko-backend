@@ -153,3 +153,34 @@ async def get_audit(
     db: AsyncSession = Depends(get_db),
 ):
     return await application_service.get_audit_trail(db, application_id, current_user)
+
+
+@router.get("/{application_id}/completion-requirements")
+async def get_completion_requirements(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select as _sel
+    from app.models.application import Application, CompletionRequirement
+    from app.models.user import UserRole
+    # Students can only view their own; OSFA/admin can view any
+    if current_user.role == UserRole.student:
+        app_check = (await db.execute(_sel(Application).where(Application.id == application_id))).scalar_one_or_none()
+        if not app_check or app_check.student_id != current_user.id:
+            from app.exceptions import ForbiddenError
+            raise ForbiddenError("Not your application")
+    reqs = (await db.execute(
+        _sel(CompletionRequirement)
+        .where(CompletionRequirement.application_id == application_id)
+        .order_by(CompletionRequirement.submitted_at)
+    )).scalars().all()
+    return [
+        {
+            "id": r.id,
+            "requirement_type": r.requirement_type,
+            "file_url": r.file_url,
+            "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+        }
+        for r in reqs
+    ]
