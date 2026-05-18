@@ -157,11 +157,12 @@ async def get_confirmation_letter(
     from app.utils.document_generator import generate_confirmation_letter
     from sqlalchemy.orm import selectinload
 
+    from app.models.user import User
     result = await db.execute(
         select(Application)
         .options(
             selectinload(Application.scholarship),
-            selectinload(Application.student).selectinload(StudentProfile.user if hasattr(StudentProfile, 'user') else StudentProfile),
+            selectinload(Application.student).selectinload(User.student_profile),
         )
         .where(Application.id == application_id)
     )
@@ -197,9 +198,13 @@ async def get_scholar_terms(
     from app.utils.document_generator import generate_scholar_terms
     from sqlalchemy.orm import selectinload
 
+    from app.models.user import User
     result = await db.execute(
         select(Application)
-        .options(selectinload(Application.scholarship), selectinload(Application.student))
+        .options(
+            selectinload(Application.scholarship),
+            selectinload(Application.student).selectinload(User.student_profile),
+        )
         .where(Application.id == application_id)
     )
     app = result.scalar_one_or_none()
