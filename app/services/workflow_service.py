@@ -160,7 +160,7 @@ async def _notify_osfa_staff(db: AsyncSession, app: Application, title: str, bod
         )
     )
     for staff in result.scalars().all():
-        await create_notification(db, staff.id, title, body, app.id)
+        await create_notification(db, staff.id, title, body, app.id, link=f"/applicants/{app.id}")
 
 
 # ─── Public API ──────────────────────────────────────────────────────────────

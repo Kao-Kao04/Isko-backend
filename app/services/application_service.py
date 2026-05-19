@@ -188,10 +188,28 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
     app.sub_status = SubStatus.SUBMITTED
 
     await append_audit(db, app.id, student.id, "submitted", to_status=ApplicationStatus.pending)
+
+    # Notify student
     await create_notification(
         db, student.id, "Application Submitted",
         f"Your application for {scholarship.name} has been submitted.", app.id
     )
+
+    # Notify OSFA staff in matching department
+    student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}".strip() if student.student_profile else student.email
+    if scholarship.category:
+        osfa_staff = (await db.execute(
+            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True, User.department == scholarship.category)
+        )).scalars().all()
+        for s in osfa_staff:
+            await create_notification(
+                db, s.id,
+                "New Application Received",
+                f"{student_label} applied for {scholarship.name}",
+                app.id,
+                link=f"/applicants/{app.id}",
+            )
+
     await db.commit()
     return await _get_application(db, app.id)
 
@@ -225,10 +243,31 @@ async def resubmit_application(db: AsyncSession, application_id: int, student: U
 
     sch_result = await db.execute(select(Scholarship).where(Scholarship.id == app.scholarship_id))
     scholarship = sch_result.scalar_one_or_none()
+    sch_name = scholarship.name if scholarship else "the scholarship"
+
+    # Notify student
     await create_notification(
         db, student.id, "Application Resubmitted",
-        f"Your application for {scholarship.name if scholarship else 'the scholarship'} has been resubmitted.", app.id
+        f"Your application for {sch_name} has been resubmitted.", app.id
     )
+
+    # Notify OSFA — student fixed their documents
+    student_label = student.email
+    if student.student_profile:
+        student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}".strip() or student.email
+    if scholarship and scholarship.category:
+        osfa_staff = (await db.execute(
+            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True, User.department == scholarship.category)
+        )).scalars().all()
+        for s in osfa_staff:
+            await create_notification(
+                db, s.id,
+                "Application Resubmitted",
+                f"{student_label} resubmitted their application for {sch_name}",
+                app.id,
+                link=f"/applicants/{app.id}",
+            )
+
     await db.commit()
     return await _get_application(db, app.id)
 
