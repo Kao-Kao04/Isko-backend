@@ -8,6 +8,9 @@ import subprocess
 import sys
 import threading
 
+# Ensure the project root (/app on Railway) is on sys.path so 'app.main' is importable
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 def run(cmd: list[str], timeout: int = 60) -> int:
     try:
