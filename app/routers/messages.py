@@ -135,3 +135,71 @@ async def send_message(
 
     await db.commit()
     return _fmt(msg)
+
+
+# ── Inbox ─────────────────────────────────────────────────────────────────────
+
+@router.get("/inbox")
+async def get_inbox(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all conversations (applications with ≥1 message) for the current user."""
+    from sqlalchemy import func as _func, desc, case
+    from app.models.scholarship import Scholarship
+
+    # Aggregate per application: latest message time, total count, unread count
+    unread_expr = _func.sum(
+        case((
+            (ApplicationMessage.is_read == False) & (ApplicationMessage.sender_id != current_user.id),
+            1,
+        ), else_=0)
+    )
+
+    subq = (
+        select(
+            ApplicationMessage.application_id,
+            _func.max(ApplicationMessage.created_at).label("last_at"),
+            _func.count(ApplicationMessage.id).label("msg_count"),
+            unread_expr.label("unread"),
+        )
+        .group_by(ApplicationMessage.application_id)
+        .subquery()
+    )
+
+    q = (
+        select(Application, subq.c.last_at, subq.c.msg_count, subq.c.unread)
+        .join(subq, Application.id == subq.c.application_id)
+        .options(
+            selectinload(Application.scholarship),
+            selectinload(Application.student).selectinload(User.student_profile),
+        )
+        .order_by(desc(subq.c.last_at))
+    )
+
+    if current_user.role == UserRole.student:
+        q = q.where(Application.student_id == current_user.id)
+    elif current_user.role == UserRole.osfa_staff and current_user.department:
+        q = (q
+             .join(Scholarship, Application.scholarship_id == Scholarship.id)
+             .where(Scholarship.category == current_user.department.value))
+
+    rows = (await db.execute(q)).all()
+
+    result = []
+    for app, last_at, msg_count, unread in rows:
+        p = app.student.student_profile if app.student else None
+        student_name = (
+            f"{p.first_name} {p.last_name}".strip() if p
+            else (app.student.email if app.student else f"Student #{app.student_id}")
+        )
+        result.append({
+            "application_id":   app.id,
+            "student_name":     student_name,
+            "student_email":    app.student.email if app.student else "",
+            "scholarship_name": app.scholarship.name if app.scholarship else f"Scholarship #{app.scholarship_id}",
+            "last_message_at":  last_at.isoformat() if last_at else None,
+            "message_count":    int(msg_count or 0),
+            "unread_count":     int(unread or 0),
+        })
+    return {"items": result, "total": len(result)}
