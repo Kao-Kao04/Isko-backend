@@ -175,7 +175,7 @@ async def update_status(db: AsyncSession, scholarship_id: int, data: Scholarship
     return await get_scholarship(db, scholarship_id)
 
 
-async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User) -> None:
+async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User, force: bool = False) -> None:
     result = await db.execute(
         select(Scholarship)
         .options(selectinload(Scholarship.requirements))
@@ -187,7 +187,7 @@ async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User) 
 
     _check_dept_owns_scholarship(scholarship, user)
 
-    # Prevent deletion if any non-withdrawn applications exist
+    # Count non-withdrawn applications
     app_count_result = await db.execute(
         select(func.count(Application.id)).where(
             Application.scholarship_id == scholarship_id,
@@ -195,10 +195,11 @@ async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User) 
         )
     )
     active_app_count = app_count_result.scalar()
-    if active_app_count > 0:
+
+    if active_app_count > 0 and not force:
         raise ValidationError(
             f"Cannot delete this scholarship — it has {active_app_count} active application(s). "
-            "Archive it instead, or withdraw all applications first."
+            "Archive it instead, or force-delete to remove all related applications too."
         )
 
     await db.delete(scholarship)

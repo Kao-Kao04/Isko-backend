@@ -55,10 +55,11 @@ async def update_scholarship(
 @router.delete("/{scholarship_id}", status_code=204)
 async def delete_scholarship(
     scholarship_id: int,
+    force: bool = Query(False),
     current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    await scholarship_service.delete_scholarship(db, scholarship_id, current_user)
+    await scholarship_service.delete_scholarship(db, scholarship_id, current_user, force=force)
 
 
 @router.patch("/{scholarship_id}/status", response_model=ScholarshipResponse)
