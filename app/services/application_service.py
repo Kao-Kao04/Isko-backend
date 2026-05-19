@@ -7,7 +7,7 @@ from app.models.application import Application, ApplicationStatus, WorkflowLog
 from app.models.scholarship import Scholarship, ScholarshipStatus
 from app.models.scholar import Scholar
 from app.models.appeal import Appeal, AppealStatus
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, StudentProfile
 from app.models.workflow import MainStatus, SubStatus
 from app.schemas.application import (
     ApplicationCreate, ApplicationStatusUpdate, EvalStatusUpdate, EvalScoreUpdate,
@@ -65,7 +65,6 @@ async def list_applications(
     status: str | None = None,
     search: str | None = None,
 ):
-    from app.models.registration import StudentProfile
     q = select(Application)
     if user.role == UserRole.student:
         q = q.where(Application.student_id == user.id)
@@ -81,7 +80,7 @@ async def list_applications(
     if search:
         term = f"%{search.strip()}%"
         q = (q
-            .join(User, Application.student_id == User.id)
+            .join(User, Application.student_id == User.id, isouter=False)
             .outerjoin(StudentProfile, User.id == StudentProfile.user_id)
             .where(or_(
                 User.email.ilike(term),
