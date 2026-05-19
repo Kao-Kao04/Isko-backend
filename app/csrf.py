@@ -22,7 +22,8 @@ CSRF_EXEMPT = {
     "/api/auth/forgot-password", "/api/auth/reset-callback",
     "/api/auth/reset-password", "/api/auth/reset-password-token",
     "/api/auth/confirm-email-token", "/health",
-    "/api/contact",         # public form — no session to protect
+    "/api/auth/resend-verification",  # public — no session yet
+    "/api/contact",                   # public form — no session to protect
 }
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
