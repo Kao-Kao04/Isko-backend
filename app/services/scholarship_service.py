@@ -11,7 +11,7 @@ from app.exceptions import NotFoundError, ForbiddenError, ValidationError
 # Allowed scholarship status transitions — prevents arbitrary jumps
 _STATUS_TRANSITIONS: dict[ScholarshipStatus, list[ScholarshipStatus]] = {
     ScholarshipStatus.draft:     [ScholarshipStatus.active, ScholarshipStatus.archived],
-    ScholarshipStatus.active:    [ScholarshipStatus.closed],
+    ScholarshipStatus.active:    [ScholarshipStatus.closed, ScholarshipStatus.archived],
     ScholarshipStatus.closed:    [ScholarshipStatus.archived, ScholarshipStatus.active],
     ScholarshipStatus.archived:  [],  # terminal
 }
@@ -45,17 +45,17 @@ async def _attach_applicants_counts(db: AsyncSession, scholarships: list) -> Non
 
 
 async def _auto_close_expired(db: AsyncSession) -> None:
-    """Close active scholarships whose deadline has passed or whose slots are all filled."""
+    """Archive active scholarships whose deadline has passed or whose slots are all filled."""
     now = datetime.now(timezone.utc)
 
-    # Close past-deadline scholarships
+    # Archive past-deadline scholarships
     await db.execute(
         update(Scholarship)
         .where(Scholarship.status == ScholarshipStatus.active, Scholarship.deadline < now)
-        .values(status=ScholarshipStatus.closed)
+        .values(status=ScholarshipStatus.archived)
     )
 
-    # Close fully-booked scholarships (slots not null and all filled with non-withdrawn apps)
+    # Archive fully-booked scholarships (slots not null and all filled with non-withdrawn apps)
     filled_subq = (
         select(Application.scholarship_id, func.count(Application.id).label("cnt"))
         .where(Application.status.notin_([ApplicationStatus.withdrawn]))
@@ -72,7 +72,7 @@ async def _auto_close_expired(db: AsyncSession) -> None:
                 .where(filled_subq.c.cnt >= Scholarship.slots)
             ),
         )
-        .values(status=ScholarshipStatus.closed)
+        .values(status=ScholarshipStatus.archived)
     )
     await db.commit()
 
