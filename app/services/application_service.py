@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.models.application import Application, ApplicationStatus, WorkflowLog
@@ -57,7 +57,15 @@ def _check_eligibility(scholarship: Scholarship, student_profile) -> None:
             pass  # Unparseable GWA — skip the check rather than blocking the student
 
 
-async def list_applications(db: AsyncSession, user: User, page: int, page_size: int, status: str | None = None):
+async def list_applications(
+    db: AsyncSession,
+    user: User,
+    page: int,
+    page_size: int,
+    status: str | None = None,
+    search: str | None = None,
+):
+    from app.models.registration import StudentProfile
     q = select(Application)
     if user.role == UserRole.student:
         q = q.where(Application.student_id == user.id)
@@ -70,6 +78,17 @@ async def list_applications(db: AsyncSession, user: User, page: int, page_size: 
             q = q.where(Application.status == ApplicationStatus(status))
         except ValueError:
             pass
+    if search:
+        term = f"%{search.strip()}%"
+        q = (q
+            .join(User, Application.student_id == User.id)
+            .outerjoin(StudentProfile, User.id == StudentProfile.user_id)
+            .where(or_(
+                User.email.ilike(term),
+                StudentProfile.first_name.ilike(term),
+                StudentProfile.last_name.ilike(term),
+                func.concat(StudentProfile.first_name, ' ', StudentProfile.last_name).ilike(term),
+            )))
 
     q = q.order_by(Application.submitted_at.desc())
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
