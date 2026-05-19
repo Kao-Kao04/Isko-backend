@@ -7,7 +7,8 @@ from sqlalchemy import select, func
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import require_super_admin, require_osfa_or_admin, get_current_user
+from app.dependencies import require_super_admin, require_osfa_or_admin, get_current_user, get_optional_user
+# get_current_user is used by /api/student/contacts endpoint
 from app.models.message import ContactInquiry
 from app.models.user import User
 
@@ -44,7 +45,7 @@ def _fmt(i: ContactInquiry) -> dict:
 async def submit_contact(
     data: ContactRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User | None = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_user),
 ):
     if not data.name.strip() or not data.message.strip():
         raise HTTPException(status_code=422, detail={"code": "VALIDATION_ERROR", "message": "Name and message are required"})

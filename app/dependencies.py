@@ -81,3 +81,31 @@ async def require_super_admin(current_user: User = Depends(get_current_user)) ->
     if current_user.role != UserRole.super_admin:
         raise ForbiddenError("Super admin access required")
     return current_user
+
+
+async def get_optional_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but returns None instead of 401 when not authenticated."""
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
+        return None
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            return None
+        user_id: int = int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        return None
+
+    if is_revoked(hashlib.sha256(token.encode()).hexdigest()):
+        return None
+
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.student_profile))
+        .where(User.id == user_id, User.is_active == True)
+    )
+    return result.scalar_one_or_none()
