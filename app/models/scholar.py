@@ -60,7 +60,7 @@ class Scholar(Base):
     user         = relationship("User",         foreign_keys=[student_id])
     scholarship  = relationship("Scholarship",  foreign_keys=[scholarship_id])
     semester_records = relationship("SemesterRecord", back_populates="scholar", cascade="all, delete-orphan")
-    status_logs      = relationship("ScholarStatusLog", back_populates="scholar", order_by="ScholarStatusLog.created_at")
+    status_logs      = relationship("ScholarStatusLog", back_populates="scholar", order_by="ScholarStatusLog.created_at", cascade="all, delete-orphan")
 
 
 class SemesterRecord(Base):
