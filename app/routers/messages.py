@@ -184,7 +184,12 @@ async def get_inbox(
              .join(Scholarship, Application.scholarship_id == Scholarship.id)
              .where(Scholarship.category == current_user.department.value))
 
-    rows = (await db.execute(q)).all()
+    try:
+        rows = (await db.execute(q)).all()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("inbox query failed: %s", exc, exc_info=True)
+        return {"items": [], "total": 0, "error": str(exc)}
 
     result = []
     for app, last_at, msg_count, unread in rows:
