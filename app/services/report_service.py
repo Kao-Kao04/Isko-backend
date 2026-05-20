@@ -96,10 +96,13 @@ async def get_scholarship_breakdown(db: AsyncSession, current_user: User) -> lis
 
 
 async def get_application_trends(db: AsyncSession, current_user: User) -> list:
-    from sqlalchemy import func as _func, case as _case
-    # Use main_status when available (workflow apps), fall back to legacy status.
-    # Label the column "status" to match what the frontend ApplicationTrend type expects.
-    status_expr = _func.coalesce(Application.main_status, Application.status).label("status")
+    from sqlalchemy import func as _func, cast, Text
+    # Cast both enum columns to Text before COALESCE — PostgreSQL cannot coerce
+    # applicationstatus to mainstatus directly since they are different enum types.
+    status_expr = _func.coalesce(
+        cast(Application.main_status, Text),
+        cast(Application.status, Text),
+    ).label("status")
     q = (
         select(
             func.date_trunc("day", Application.submitted_at).label("date"),
