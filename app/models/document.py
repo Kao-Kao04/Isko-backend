@@ -16,7 +16,7 @@ class ApplicationDocument(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    requirement_id = Column(Integer, ForeignKey("scholarship_requirements.id"))
+    requirement_id = Column(Integer, ForeignKey("scholarship_requirements.id", ondelete="SET NULL"), nullable=True)
     filename = Column(String, nullable=False)
     storage_path = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
