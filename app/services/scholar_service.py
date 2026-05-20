@@ -97,19 +97,56 @@ async def update_scholar_status(
     )
     db.add(log)
 
+    # Fetch scholarship name for notification messages
+    from app.models.scholarship import Scholarship as _Sch
+    sch_result = await db.execute(select(_Sch).where(_Sch.id == scholar.scholarship_id))
+    sch = sch_result.scalar_one_or_none()
+    sch_name = sch.name if sch else "your scholarship"
+
+    # In-app notification for every status change
+    _NOTIF_MAP: dict[str, tuple[str, str]] = {
+        "active":       ("Scholarship Status: Active",
+                         f"Your scholarship ({sch_name}) is now active. Keep up the good work!"),
+        "probationary": ("Scholarship Status: Probationary",
+                         f"Your scholarship ({sch_name}) has been placed on probationary status. "
+                         "Please maintain your academic performance to avoid suspension."),
+        "under_review": ("Scholarship Under Review",
+                         f"Your scholarship ({sch_name}) is currently under review by OSFA. "
+                         "You will be notified once a decision is made."),
+        "on_leave":     ("Scholarship Leave Approved",
+                         f"Your leave of absence for {sch_name} has been recorded. "
+                         "Please re-enroll and notify OSFA when you return."),
+        "suspended":    ("Scholarship Suspended",
+                         f"Your scholarship ({sch_name}) has been suspended. "
+                         f"{('Reason: ' + data.reason) if data.reason else 'Please contact OSFA for more information.'}"),
+        "terminated":   ("Scholarship Terminated",
+                         f"Your scholarship ({sch_name}) has been terminated. "
+                         f"{('Reason: ' + data.reason) if data.reason else 'Please contact OSFA for more information.'}"),
+        "graduated":    ("Congratulations, Scholar!",
+                         f"You have successfully completed your scholarship program ({sch_name}). "
+                         "Thank you for your dedication and hard work!"),
+    }
+
+    notif_key = data.status.value
+    if notif_key in _NOTIF_MAP:
+        from app.services.notification_service import create_notification
+        title, body = _NOTIF_MAP[notif_key]
+        try:
+            await create_notification(db, scholar.student_id, title, body, scholar.application_id)
+        except Exception:
+            pass  # notification failure must not block the status update
+
+    # Email for termination (already existed)
     if data.status.value == "terminated":
         from app.utils.email import send_scholar_terminated_email
         from app.models.user import User as UserModel
-        from sqlalchemy.orm import selectinload as _sel
-        result = await db.execute(
-            select(UserModel).where(UserModel.id == scholar.student_id)
-        )
-        user = result.scalar_one_or_none()
+        user_result = await db.execute(select(UserModel).where(UserModel.id == scholar.student_id))
+        user = user_result.scalar_one_or_none()
         if user:
             try:
                 await send_scholar_terminated_email(user.email, data.reason)
             except Exception:
-                pass  # email failure must not block the status update
+                pass
 
     await db.commit()
     await db.refresh(scholar)
