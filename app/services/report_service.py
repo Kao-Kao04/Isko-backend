@@ -96,13 +96,18 @@ async def get_scholarship_breakdown(db: AsyncSession, current_user: User) -> lis
 
 
 async def get_application_trends(db: AsyncSession, current_user: User) -> list:
+    from sqlalchemy import func as _func, case as _case
+    # Use main_status when available (workflow apps), fall back to legacy status.
+    # Label the column "status" to match what the frontend ApplicationTrend type expects.
+    status_expr = _func.coalesce(Application.main_status, Application.status).label("status")
     q = (
         select(
             func.date_trunc("day", Application.submitted_at).label("date"),
-            Application.main_status,
+            status_expr,
             func.count(Application.id).label("count"),
         )
-        .group_by("date", Application.main_status)
+        .where(Application.submitted_at.is_not(None))
+        .group_by("date", status_expr)
         .order_by("date")
     )
     if current_user.role == UserRole.osfa_staff and current_user.department:
@@ -111,4 +116,11 @@ async def get_application_trends(db: AsyncSession, current_user: User) -> list:
             .where(Scholarship.category == current_user.department.value)
         )
     result = await db.execute(q)
-    return [row._asdict() for row in result]
+    rows = []
+    for row in result:
+        d = row._asdict()
+        # Convert datetime to ISO string so JSON serialiser handles it
+        if hasattr(d["date"], "isoformat"):
+            d["date"] = d["date"].isoformat()
+        rows.append(d)
+    return rows
