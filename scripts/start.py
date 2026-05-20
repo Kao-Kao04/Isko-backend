@@ -12,7 +12,7 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def run(cmd: list[str], timeout: int = 60) -> int:
+def run(cmd: list[str], timeout: int = 180) -> int:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.stdout:

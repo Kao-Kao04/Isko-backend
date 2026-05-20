@@ -20,10 +20,16 @@ def upgrade() -> None:
     cols = {c['name'] for c in inspect(bind).get_columns('contact_inquiries')}
 
     if 'student_user_id' not in cols:
+        # Add column without inline ForeignKey — inline FK in add_column is
+        # unreliable across Alembic/PostgreSQL versions; use create_foreign_key.
         op.add_column('contact_inquiries',
-            sa.Column('student_user_id', sa.Integer(),
-                      sa.ForeignKey('users.id', ondelete='SET NULL'),
-                      nullable=True))
+            sa.Column('student_user_id', sa.Integer(), nullable=True))
+        op.create_foreign_key(
+            'contact_inquiries_student_user_id_fkey',
+            'contact_inquiries', 'users',
+            ['student_user_id'], ['id'],
+            ondelete='SET NULL',
+        )
 
     if 'osfa_reply' not in cols:
         op.add_column('contact_inquiries',
@@ -35,6 +41,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_constraint('contact_inquiries_student_user_id_fkey',
+                       'contact_inquiries', type_='foreignkey')
     op.drop_column('contact_inquiries', 'replied_at')
     op.drop_column('contact_inquiries', 'osfa_reply')
     op.drop_column('contact_inquiries', 'student_user_id')
