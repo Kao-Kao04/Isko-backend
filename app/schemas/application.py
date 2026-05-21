@@ -117,6 +117,7 @@ class ApplicationScholarshipInfo(BaseModel):
     id: int
     name: str
     scholarship_type: str | None = None
+    category: str | None = None
 
     model_config = {"from_attributes": True}
 
