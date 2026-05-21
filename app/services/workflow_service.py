@@ -325,8 +325,13 @@ async def schedule_interview(
         app.id,
     )
     if actor.role == UserRole.student:
-        await _notify_osfa_staff(db, app, "Interview Scheduled by Student",
-            f"{_student_name(app)} scheduled their interview for {_sch_name(app)} on {dt_str}.")
+        await _notify_osfa_staff(
+            db, app,
+            "Submission Date Scheduled by Student" if is_public else "Interview Scheduled by Student",
+            (f"{_student_name(app)} scheduled a submission date for {_sch_name(app)} on {dt_str}."
+             if is_public else
+             f"{_student_name(app)} scheduled their interview for {_sch_name(app)} on {dt_str}."),
+        )
     else:
         # OSFA scheduled — email the student
         if app.student:
@@ -371,16 +376,24 @@ async def reschedule_interview(
 ) -> Application:
     app = await _get_app(db, application_id)
     _assert_student_owns(app, actor)
+    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
 
     if app.sub_status not in (SubStatus.SCHEDULED, SubStatus.RESCHEDULED):
         raise ValidationError("Can only reschedule a SCHEDULED or RESCHEDULED interview.")
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.RESCHEDULED, reason)
-    await _notify_osfa_staff(db, app, "Reschedule Requested",
-        f"{_student_name(app)} requested an interview reschedule for {_sch_name(app)}.")
+    await _notify_osfa_staff(
+        db, app,
+        "Submission Date Change Requested" if is_public else "Reschedule Requested",
+        (f"{_student_name(app)} requested a submission date change for {_sch_name(app)}."
+         if is_public else
+         f"{_student_name(app)} requested an interview reschedule for {_sch_name(app)}."),
+    )
     notif = _queue_notification(
         db, app.student_id,
-        "Interview Rescheduled",
-        f"Your interview for {_sch_name(app)} has been marked for rescheduling.",
+        "Submission Date Change Requested" if is_public else "Interview Rescheduled",
+        (f"Your request to change the submission date for {_sch_name(app)} has been sent to OSFA."
+         if is_public else
+         f"Your interview for {_sch_name(app)} has been marked for rescheduling."),
         app.id,
     )
     return await _commit_and_notify(db, app, notif)
