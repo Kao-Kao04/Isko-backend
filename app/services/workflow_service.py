@@ -306,6 +306,10 @@ async def schedule_interview(
 
     is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
 
+    # Location required for private (in-person interview); optional for public (document submission)
+    if not is_public and not location:
+        raise ValidationError("Location is required for private scholarship interviews")
+
     # If already SCHEDULED, OSFA is updating the datetime — skip transition check, just update
     if app.sub_status == SubStatus.SCHEDULED and actor.role in (UserRole.osfa_staff, UserRole.super_admin):
         await _log(db, app, actor, MainStatus.INTERVIEW, SubStatus.SCHEDULED, note)
