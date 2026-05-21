@@ -383,7 +383,7 @@ async def reschedule_interview(
     is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
 
     if app.sub_status not in (SubStatus.SCHEDULED, SubStatus.RESCHEDULED):
-        raise ValidationError("Can only reschedule a SCHEDULED or RESCHEDULED interview.")
+        raise ValidationError("Can only reschedule a SCHEDULED or RESCHEDULED interview." if not is_public else "Can only change date for a SCHEDULED or RESCHEDULED submission.")
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.RESCHEDULED, reason)
     await _notify_osfa_staff(
         db, app,
@@ -408,10 +408,11 @@ async def complete_interview(
 ) -> Application:
     app = await _get_app(db, application_id)
     _assert_dept(app, actor)
+    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
     if not app.interview_datetime:
-        raise ValidationError("Cannot complete interview — no interview schedule exists.")
+        raise ValidationError("Cannot mark as submitted — no deadline set." if is_public else "Cannot complete interview — no interview schedule exists.")
     if app.sub_status != SubStatus.SCHEDULED:
-        raise ValidationError("Interview must be in SCHEDULED state to be completed.")
+        raise ValidationError("Submission must be in SCHEDULED state to be marked as submitted." if is_public else "Interview must be in SCHEDULED state to be completed.")
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.INTERVIEW_COMPLETED, notes)
     app.interview_completed_at = _now()
     if notes:
