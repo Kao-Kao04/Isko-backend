@@ -266,11 +266,14 @@ async def complete_verification(
 async def open_interview_scheduling(db: AsyncSession, application_id: int, actor: User) -> Application:
     app = await _get_app(db, application_id)
     _assert_dept(app, actor)
+    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.NOT_SCHEDULED)
     notif = _queue_notification(
         db, app.student_id,
-        "Interview Scheduling Open",
-        f"You can now schedule your interview for {_sch_name(app)}. Please select a time slot.",
+        "Submission Period Open" if is_public else "Interview Scheduling Open",
+        (f"The submission period for {_sch_name(app)} is now open. OSFA will notify you of the deadline."
+         if is_public else
+         f"You can now schedule your interview for {_sch_name(app)}. Please select a time slot."),
         app.id,
     )
     return await _commit_and_notify(db, app, notif)
@@ -301,6 +304,8 @@ async def schedule_interview(
     if interview_datetime <= _now():
         raise ValidationError("Interview must be scheduled for a future date and time")
 
+    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
+
     # If already SCHEDULED, OSFA is updating the datetime — skip transition check, just update
     if app.sub_status == SubStatus.SCHEDULED and actor.role in (UserRole.osfa_staff, UserRole.super_admin):
         await _log(db, app, actor, MainStatus.INTERVIEW, SubStatus.SCHEDULED, note)
@@ -313,8 +318,10 @@ async def schedule_interview(
     dt_str = interview_datetime.strftime('%B %d, %Y at %I:%M %p')
     notif = _queue_notification(
         db, app.student_id,
-        "Interview Scheduled",
-        f"Your interview for {_sch_name(app)} has been scheduled on {dt_str}.",
+        "Submission Deadline Set" if is_public else "Interview Scheduled",
+        (f"Your submission deadline for {_sch_name(app)} has been set: {dt_str}."
+         if is_public else
+         f"Your interview for {_sch_name(app)} has been scheduled on {dt_str}."),
         app.id,
     )
     if actor.role == UserRole.student:
@@ -325,10 +332,24 @@ async def schedule_interview(
         if app.student:
             from app.utils.email import _send
             location_line = f"<p><strong>Location:</strong> {app.interview_location}</p>" if app.interview_location else ""
-            asyncio.create_task(_send(
-                app.student.email,
-                f"Interview Scheduled — {_sch_name(app)}",
-                f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+            if is_public:
+                email_subject = f"Submission Deadline Set — {_sch_name(app)}"
+                email_body = f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+                <h2 style="color:#800000;">Submission Deadline Set</h2>
+                <p>Hi {_student_name(app)},</p>
+                <p>The submission deadline for your application to <strong>{_sch_name(app)}</strong> has been set.</p>
+                <p><strong>Submit documents by:</strong> {dt_str}</p>
+                {location_line}
+                <a href="{settings.FRONTEND_URL}/student/applications/{app.id}"
+                   style="display:inline-block;padding:12px 28px;background:#800000;color:#fff;
+                          text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0;">
+                    View Application
+                </a>
+                <p style="color:#6b7280;font-size:13px;">Polytechnic University of the Philippines — OSFA</p>
+                </div>"""
+            else:
+                email_subject = f"Interview Scheduled — {_sch_name(app)}"
+                email_body = f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
                 <h2 style="color:#800000;">Interview Scheduled</h2>
                 <p>Hi {_student_name(app)},</p>
                 <p>Your interview for <strong>{_sch_name(app)}</strong> has been scheduled.</p>
@@ -341,7 +362,7 @@ async def schedule_interview(
                 </a>
                 <p style="color:#6b7280;font-size:13px;">Polytechnic University of the Philippines — OSFA</p>
                 </div>"""
-            ))
+            asyncio.create_task(_send(app.student.email, email_subject, email_body))
     return await _commit_and_notify(db, app, notif)
 
 
