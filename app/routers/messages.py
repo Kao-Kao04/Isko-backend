@@ -82,6 +82,8 @@ async def send_message(
 
     app = await _get_application(application_id, db)
 
+    if current_user.role == UserRole.super_admin:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Super admin cannot send messages"})
     if current_user.role == UserRole.student and app.student_id != current_user.id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
     if current_user.role == UserRole.osfa_staff and current_user.department and app.scholarship:
@@ -117,7 +119,7 @@ async def send_message(
             try:
                 await create_notification(
                     db=db,
-                    user_id=staff.id,
+                    user_id=staff.id,  # type: ignore[arg-type]
                     title=f"New message from {student_name}",
                     body=f"Application #{application_id}: {data.body.strip()[:80]}{'…' if len(data.body.strip()) > 80 else ''}",
                     application_id=application_id,
@@ -130,7 +132,7 @@ async def send_message(
         try:
             await create_notification(
                 db=db,
-                user_id=app.student_id,
+                user_id=app.student_id,  # type: ignore[arg-type]
                 title="New reply from OSFA",
                 body=f"OSFA replied to your message on application #{application_id}.",
                 application_id=application_id,
