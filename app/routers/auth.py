@@ -81,7 +81,8 @@ def _set_auth_cookies(response: Response, tokens: dict, remember_me: bool = Fals
     from app.csrf import generate_csrf_token
     csrf = generate_csrf_token()
     max_age_refresh = 60 * 60 * 24 * 30 if remember_me else 60 * 60 * 24 * 7
-    max_age_access  = 60 * 16  # 16 min (slightly > 15-min token lifetime)
+    # Access + CSRF cookies: 30 days with remember_me, 8 hours otherwise (matches token expiry)
+    max_age_access  = 60 * 60 * 24 * 30 if remember_me else 60 * 60 * 8
 
     response.set_cookie(
         "access_token", tokens["access_token"],
@@ -91,10 +92,14 @@ def _set_auth_cookies(response: Response, tokens: dict, remember_me: bool = Fals
         "refresh_token", tokens["refresh_token"],
         httponly=True, secure=True, samesite="none", max_age=max_age_refresh,
     )
-    # Keep the cookie for same-origin / browser-native clients
     response.set_cookie(
         "csrf_token", csrf,
         httponly=False, secure=True, samesite="none", max_age=max_age_access,
+    )
+    # Non-sensitive flag so the refresh endpoint can preserve remember_me behaviour
+    response.set_cookie(
+        "remember_me", "1" if remember_me else "0",
+        httponly=False, secure=True, samesite="none", max_age=max_age_refresh,
     )
     return csrf
 
@@ -113,13 +118,15 @@ async def refresh(
     request: Request,  # noqa: ARG001 — consumed by @limiter.limit
     response: Response,
     refresh_token: str | None = Cookie(default=None),
+    remember_me_cookie: str | None = Cookie(default=None, alias="remember_me"),
     db: AsyncSession = Depends(get_db),
 ):
     from app.exceptions import UnauthorizedError
     if not refresh_token:
         raise UnauthorizedError("No refresh token")
     tokens = await auth_service.refresh_tokens(db, refresh_token)
-    csrf = _set_auth_cookies(response, tokens)
+    remember_me = remember_me_cookie == "1"
+    csrf = _set_auth_cookies(response, tokens, remember_me=remember_me)
     return {**TokenResponse(access_token=tokens["access_token"]).model_dump(), "csrf_token": csrf}
 
 
