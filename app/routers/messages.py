@@ -57,6 +57,9 @@ async def list_messages(
 
     if current_user.role == UserRole.student and app.student_id != current_user.id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
+    if current_user.role == UserRole.osfa_staff and current_user.department and app.scholarship:
+        if app.scholarship.category != current_user.department:
+            raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your department's application"})
 
     # Mark messages from the other party as read
     for m in app.messages:
@@ -81,6 +84,9 @@ async def send_message(
 
     if current_user.role == UserRole.student and app.student_id != current_user.id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
+    if current_user.role == UserRole.osfa_staff and current_user.department and app.scholarship:
+        if app.scholarship.category != current_user.department:
+            raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your department's application"})
 
     msg = ApplicationMessage(
         application_id=application_id,
