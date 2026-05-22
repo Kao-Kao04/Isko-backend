@@ -205,10 +205,12 @@ async def list_students(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     account_status: str | None = Query(None),
+    scholar_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_super_admin),
 ):
     from sqlalchemy.orm import selectinload
+    from app.models.scholar import Scholar as ScholarModel
     query = (
         select(User)
         .options(selectinload(User.student_profile))
@@ -225,11 +227,15 @@ async def list_students(
         except ValueError:
             pass
 
+    if scholar_only:
+        scholar_subq = select(ScholarModel.student_id).distinct().subquery()
+        query = query.where(User.id.in_(select(scholar_subq.c.student_id)))
+        count_query = count_query.where(User.id.in_(select(scholar_subq.c.student_id)))
+
     total = (await db.execute(count_query)).scalar()
     users = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all()
 
     # Attach scholar status — prefer active/probationary over terminal statuses
-    from app.models.scholar import Scholar
     from app.schemas.user import UserResponse
     user_ids = [u.id for u in users]
     scholar_map: dict[int, str] = {}
@@ -239,7 +245,7 @@ async def list_students(
             'on_leave': 3, 'suspended': 4, 'graduated': 5, 'terminated': 6,
         }
         rows = (await db.execute(
-            select(Scholar.student_id, Scholar.status).where(Scholar.student_id.in_(user_ids))
+            select(ScholarModel.student_id, ScholarModel.status).where(ScholarModel.student_id.in_(user_ids))
         )).all()
         for sid, sstat in rows:
             sv = sstat.value
