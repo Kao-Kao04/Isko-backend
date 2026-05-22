@@ -148,6 +148,7 @@ async def logout(
     response.delete_cookie("access_token", samesite="none", secure=True)
     response.delete_cookie("refresh_token", samesite="none", secure=True)
     response.delete_cookie("csrf_token", samesite="none", secure=True)
+    response.delete_cookie("remember_me", samesite="none", secure=True)
     return {"message": "Logged out"}
 
 
