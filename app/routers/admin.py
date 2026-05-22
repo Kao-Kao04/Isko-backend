@@ -228,9 +228,34 @@ async def list_students(
     total = (await db.execute(count_query)).scalar()
     users = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all()
 
-    from app.utils.pagination import paginate
+    # Attach scholar status — prefer active/probationary over terminal statuses
+    from app.models.scholar import Scholar
     from app.schemas.user import UserResponse
-    return paginate(users, total, page, page_size)
+    user_ids = [u.id for u in users]
+    scholar_map: dict[int, str] = {}
+    if user_ids:
+        _STATUS_RANK = {
+            'active': 0, 'probationary': 1, 'under_review': 2,
+            'on_leave': 3, 'suspended': 4, 'graduated': 5, 'terminated': 6,
+        }
+        rows = (await db.execute(
+            select(Scholar.student_id, Scholar.status).where(Scholar.student_id.in_(user_ids))
+        )).all()
+        for sid, sstat in rows:
+            sv = sstat.value
+            existing = scholar_map.get(sid)
+            if existing is None or _STATUS_RANK.get(sv, 99) < _STATUS_RANK.get(existing, 99):
+                scholar_map[sid] = sv
+
+    items = []
+    for u in users:
+        d = UserResponse.model_validate(u).model_dump()
+        d['scholar_status'] = scholar_map.get(u.id)  # type: ignore[arg-type]
+        items.append(d)
+
+    total_count = int(total or 0)
+    pages = (total_count + page_size - 1) // page_size if page_size else 1
+    return {"items": items, "total": total_count, "page": page, "page_size": page_size, "pages": pages}
 
 
 @router.patch("/students/{student_id}/toggle-active", status_code=200)
