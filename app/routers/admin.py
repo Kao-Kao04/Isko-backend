@@ -3,7 +3,7 @@ import io
 from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -27,8 +27,8 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 class BroadcastRequest(BaseModel):
-    title: str
-    body: str
+    title: str = Field(..., max_length=200)
+    body: str = Field(..., max_length=2000)
     target: str = "students"  # "students" | "osfa_staff" | "all"
 
 

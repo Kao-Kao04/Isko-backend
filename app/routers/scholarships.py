@@ -84,8 +84,11 @@ async def duplicate_scholarship(
 @router.get("/{scholarship_id}/report", response_class=HTMLResponse)
 async def scholarship_report(
     scholarship_id: int,
-    _: User = Depends(require_osfa_or_admin),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.services.scholarship_service import _check_dept_owns_scholarship, get_scholarship as _get_sch
+    sch = await _get_sch(db, scholarship_id)
+    _check_dept_owns_scholarship(sch, current_user)
     html = await scholarship_service.generate_report_html(db, scholarship_id)
     return HTMLResponse(content=html)

@@ -258,6 +258,8 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
         raise ValidationError("Reset link has expired or is invalid. Please request a new one.")
 
     if settings.ENVIRONMENT == "development":
+        import hashlib
+        from app.token_blacklist import revoke_token
         user_id = int(payload["sub"])
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
@@ -265,6 +267,9 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
             raise ValidationError("User not found")
         user.hashed_password = hash_password(new_password)
         await db.commit()
+        # Revoke the reset token so it cannot be reused within the 30-min window
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        revoke_token(token_hash)
         return
 
     supabase_uid = payload.get("supabase_uid")

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/applications", tags=["messages"])
 
 
 class MessageRequest(BaseModel):
-    body: str
+    body: str = Field(..., max_length=5000)
 
 
 def _fmt(m: ApplicationMessage) -> dict:

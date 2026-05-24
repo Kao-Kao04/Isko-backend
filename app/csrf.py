@@ -12,6 +12,7 @@ The middleware validates that header == cookie value.
 Skipped for GET/HEAD/OPTIONS and auth endpoints (login/signup/refresh)
 that are the entry points for unauthenticated users.
 """
+import hmac
 import secrets
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -40,7 +41,7 @@ async def csrf_middleware(request: Request, call_next):
     cookie_token = request.cookies.get("csrf_token")
     header_token = request.headers.get("X-CSRF-Token")
 
-    if not cookie_token or not header_token or cookie_token != header_token:
+    if not cookie_token or not header_token or not hmac.compare_digest(cookie_token, header_token):
         return JSONResponse(
             status_code=403,
             content={"code": "CSRF_INVALID", "message": "Invalid or missing CSRF token"},

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +6,8 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_osfa_or_admin
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.scholarship import Scholarship
 from app.services import compliance_service
 from app.exceptions import NotFoundError
 
@@ -68,9 +69,14 @@ async def list_compliance_doc_types(
 async def create_compliance_doc_type(
     scholarship_id: int,
     data: ComplianceDocTypeCreate,
-    _: User = Depends(require_osfa_or_admin),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    sch = (await db.execute(select(Scholarship).where(Scholarship.id == scholarship_id))).scalar_one_or_none()
+    if not sch:
+        raise NotFoundError("Scholarship", scholarship_id)
+    if current_user.role == UserRole.osfa_staff and current_user.department and sch.category != current_user.department:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "This scholarship belongs to a different department"})
     return await compliance_service.create_compliance_doc_type(
         db, scholarship_id, data.name, data.description, data.is_required, data.order
     )
@@ -79,9 +85,15 @@ async def create_compliance_doc_type(
 @router.delete("/scholarships/compliance-docs/{doc_type_id}", status_code=204)
 async def delete_compliance_doc_type(
     doc_type_id: int,
-    _: User = Depends(require_osfa_or_admin),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.scholarship import ComplianceDocumentType
+    doc_type = (await db.execute(select(ComplianceDocumentType).where(ComplianceDocumentType.id == doc_type_id))).scalar_one_or_none()
+    if doc_type:
+        sch = (await db.execute(select(Scholarship).where(Scholarship.id == doc_type.scholarship_id))).scalar_one_or_none()
+        if sch and current_user.role == UserRole.osfa_staff and current_user.department and sch.category != current_user.department:
+            raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "This scholarship belongs to a different department"})
     await compliance_service.delete_compliance_doc_type(db, doc_type_id)
 
 
@@ -93,6 +105,12 @@ async def list_compliance_docs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.application import Application
+    app = (await db.execute(select(Application).where(Application.id == application_id))).scalar_one_or_none()
+    if not app:
+        raise NotFoundError("Application", application_id)
+    if current_user.role == UserRole.student and app.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
     return await compliance_service.list_compliance_docs(db, application_id)
 
 
@@ -151,7 +169,7 @@ async def submit_thank_you(
 @router.get("/applications/{application_id}/documents/confirmation-letter", response_class=HTMLResponse)
 async def get_confirmation_letter(
     application_id: int,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.application import Application
@@ -171,6 +189,8 @@ async def get_confirmation_letter(
     app = result.scalar_one_or_none()
     if not app:
         raise NotFoundError("Application", application_id)
+    if current_user.role == UserRole.student and app.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
 
     profile = app.student.student_profile if app.student else None
     scholar_name = f"{profile.first_name} {profile.last_name}" if profile else "Scholar"
@@ -192,7 +212,7 @@ async def get_confirmation_letter(
 @router.get("/applications/{application_id}/documents/terms", response_class=HTMLResponse)
 async def get_scholar_terms(
     application_id: int,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.application import Application
@@ -212,6 +232,8 @@ async def get_scholar_terms(
     app = result.scalar_one_or_none()
     if not app:
         raise NotFoundError("Application", application_id)
+    if current_user.role == UserRole.student and app.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
 
     profile = app.student.student_profile if app.student else None
     scholar_name = f"{profile.first_name} {profile.last_name}" if profile else "Scholar"

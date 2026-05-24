@@ -140,10 +140,26 @@ async def logout(
     import hashlib
     from app.token_blacklist import revoke_and_persist
 
-    # Revoke whichever token we can find (header OR cookie)
+    # Revoke whichever access token we can find (header OR cookie)
     token = credentials.credentials if credentials else request.cookies.get("access_token")
     if token:
         await revoke_and_persist(hashlib.sha256(token.encode()).hexdigest(), db)
+
+    # Also revoke the refresh token so it cannot be replayed after logout
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        from datetime import datetime, timezone, timedelta
+        from app.models.revoked_token import RevokedToken
+        from sqlalchemy import select as _sel
+        from app.token_blacklist import revoke as _revoke_mem
+        refresh_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+        _revoke_mem(refresh_hash)
+        existing = await db.execute(_sel(RevokedToken).where(RevokedToken.token_hash == refresh_hash))
+        if not existing.scalar_one_or_none():
+            refresh_ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=refresh_ttl)
+            db.add(RevokedToken(token_hash=refresh_hash, expires_at=expires_at))
+            await db.commit()
 
     response.delete_cookie("access_token", samesite="none", secure=True)
     response.delete_cookie("refresh_token", samesite="none", secure=True)

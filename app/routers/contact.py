@@ -1,7 +1,8 @@
 import asyncio
+import html as _html
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -9,6 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies import require_super_admin, require_osfa_or_admin, get_current_user, get_optional_user
 # get_current_user is used by /api/student/contacts endpoint
+from app.limiter import limiter
 from app.models.message import ContactInquiry
 from app.models.user import User
 
@@ -16,14 +18,14 @@ router = APIRouter(tags=["contact"])
 
 
 class ContactRequest(BaseModel):
-    name: str
+    name: str = Field(..., max_length=200)
     email: EmailStr
-    subject: str | None = None
-    message: str
+    subject: str | None = Field(None, max_length=300)
+    message: str = Field(..., max_length=5000)
 
 
 class ReplyRequest(BaseModel):
-    reply: str
+    reply: str = Field(..., max_length=5000)
 
 
 def _fmt(i: ContactInquiry) -> dict:
@@ -42,7 +44,9 @@ def _fmt(i: ContactInquiry) -> dict:
 
 
 @router.post("/api/contact", status_code=201)
+@limiter.limit("5/minute")
 async def submit_contact(
+    request: Request,
     data: ContactRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
@@ -65,18 +69,22 @@ async def submit_contact(
     if notify_email:
         from app.utils.email import _send
         subject_line = data.subject.strip() if data.subject else "General Inquiry"
+        safe_name = _html.escape(data.name.strip())
+        safe_email = _html.escape(data.email)
+        safe_subject = _html.escape(subject_line)
+        safe_message = _html.escape(data.message.strip()).replace("\n", "<br>")
         asyncio.create_task(_send(
             notify_email,
             f"[IskoMo Contact] {subject_line} — from {data.name.strip()}",
             f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
             <h2 style="color:#800000;">New Contact Inquiry</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:8px 0;color:#6b7280;width:100px;">From</td><td style="padding:8px 0;font-weight:600;">{data.name.strip()}</td></tr>
-              <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;"><a href="mailto:{data.email}">{data.email}</a></td></tr>
-              <tr><td style="padding:8px 0;color:#6b7280;">Subject</td><td style="padding:8px 0;">{subject_line}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280;width:100px;">From</td><td style="padding:8px 0;font-weight:600;">{safe_name}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;"><a href="mailto:{safe_email}">{safe_email}</a></td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280;">Subject</td><td style="padding:8px 0;">{safe_subject}</td></tr>
             </table>
             <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
-              <p style="margin:0;font-size:14px;color:#111827;line-height:1.7;">{data.message.strip().replace(chr(10), '<br>')}</p>
+              <p style="margin:0;font-size:14px;color:#111827;line-height:1.7;">{safe_message}</p>
             </div>
             </div>"""
         ))
@@ -133,14 +141,16 @@ async def osfa_reply(
 
     # Email reply to student
     from app.utils.email import _send
+    safe_inquiry_name = _html.escape(str(inquiry.name))
+    safe_reply = _html.escape(data.reply.strip()).replace("\n", "<br>")
     asyncio.create_task(_send(
         inquiry.email,
         f"Re: {inquiry.subject or 'Your inquiry to IskoMo OSFA'}",
         f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
         <h2 style="color:#800000;">Response from OSFA</h2>
-        <p style="font-size:14px;color:#374151;">Hi {inquiry.name},</p>
+        <p style="font-size:14px;color:#374151;">Hi {safe_inquiry_name},</p>
         <div style="padding:16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;margin:16px 0;">
-          <p style="margin:0;font-size:14px;color:#111827;line-height:1.7;">{data.reply.strip().replace(chr(10), '<br>')}</p>
+          <p style="margin:0;font-size:14px;color:#111827;line-height:1.7;">{safe_reply}</p>
         </div>
         <p style="font-size:12px;color:#9ca3af;">— IskoMo OSFA Team</p>
         </div>"""

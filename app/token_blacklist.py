@@ -12,17 +12,21 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from cachetools import TTLCache
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_ACCESS_TOKEN_MINUTES = 15
-_BLACKLIST_TTL_SECONDS = (_ACCESS_TOKEN_MINUTES + 1) * 60
+_BLACKLIST_TTL_SECONDS = (settings.ACCESS_TOKEN_EXPIRE_MINUTES + 1) * 60
 
 _blacklist: TTLCache = TTLCache(maxsize=50_000, ttl=_BLACKLIST_TTL_SECONDS)
 
 
 def revoke(token_hash: str) -> None:
     _blacklist[token_hash] = True
+
+
+# Alias used by auth_service for single-use token revocation (e.g. password reset)
+revoke_token = revoke
 
 
 def is_revoked(token_hash: str) -> bool:

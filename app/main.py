@@ -182,7 +182,7 @@ async def security_headers(request, call_next):
         "connect-src 'self' https://*.supabase.co; "
         "frame-ancestors 'none';"
     )
-    if settings.ENVIRONMENT == "production":
+    if settings.ENVIRONMENT in ("production", "staging"):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 

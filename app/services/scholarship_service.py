@@ -1,3 +1,4 @@
+import html as _html
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
@@ -283,16 +284,17 @@ async def generate_report_html(db: AsyncSession, scholarship_id: int) -> str:
     def student_name(app) -> str:
         if app.student and app.student.student_profile:
             p = app.student.student_profile
-            return f"{p.last_name}, {p.first_name} {p.middle_name or ''}".strip()
+            raw = f"{p.last_name}, {p.first_name} {p.middle_name or ''}".strip()
+            return _html.escape(raw)
         return f"Student #{app.student_id}"
 
     def student_num(app) -> str:
         if app.student and app.student.student_profile:
-            return app.student.student_profile.student_number or "—"
+            return _html.escape(app.student.student_profile.student_number or "—")
         return "—"
 
     def email(app) -> str:
-        return app.student.email if app.student else "—"
+        return _html.escape(app.student.email) if app.student else "—"
 
     STATUS_BADGE = {
         "approved":   ('<span style="color:#15803d;font-weight:700">Approved</span>'),

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from typing import Any, List
 from app.models.application import ApplicationStatus, EvalStatus
@@ -30,7 +30,7 @@ class EvalScoreUpdate(BaseModel):
 
 
 class AppealCreate(BaseModel):
-    reason: str
+    reason: str = Field(..., max_length=3000)
 
 
 class AppealReview(BaseModel):

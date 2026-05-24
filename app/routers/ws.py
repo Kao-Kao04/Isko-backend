@@ -1,7 +1,10 @@
+import hashlib
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from jose import JWTError
 
 from app.utils.security import decode_token
+from app.token_blacklist import is_revoked
 from app.websocket import manager
 
 router = APIRouter(tags=["websocket"])
@@ -21,6 +24,11 @@ async def notifications_ws(websocket: WebSocket, token: str = Query(...)):
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    if is_revoked(token_hash):
+        await websocket.close(code=4003, reason="Token has been revoked")
         return
 
     await manager.connect(websocket, user_id)

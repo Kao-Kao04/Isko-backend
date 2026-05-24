@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -126,7 +126,7 @@ async def review_appeal(
 
 
 class InternalNotesRequest(BaseModel):
-    notes: str
+    notes: str = Field(..., max_length=10000)
 
 @router.patch("/{application_id}/notes", status_code=200)
 async def update_internal_notes(

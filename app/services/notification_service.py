@@ -92,7 +92,11 @@ async def send_announcement(
     from sqlalchemy import insert as _insert
     from app.models.application import Application as _App, ApplicationStatus as _AS
     if target == "selected" and student_ids:
-        ids = student_ids
+        # Validate that all provided IDs are actual students
+        valid_rows = await db.execute(
+            select(User.id).where(User.id.in_(student_ids), User.role == UserRole.student)
+        )
+        ids = list(valid_rows.scalars().all())
     elif target == "by_scholarship" and scholarship_id:
         rows = await db.execute(
             select(User.id).join(_App, _App.student_id == User.id).where(

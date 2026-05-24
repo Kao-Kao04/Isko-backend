@@ -221,6 +221,10 @@ async def resubmit_application(db: AsyncSession, application_id: int, student: U
     if app.status != ApplicationStatus.incomplete:
         raise ValidationError("Can only resubmit Incomplete applications")
 
+    # Re-run eligibility check so profile changes don't bypass scholarship criteria
+    if app.scholarship and student.student_profile:
+        _check_eligibility(app.scholarship, student.student_profile)
+
     old_status = app.status
     app.status = ApplicationStatus.pending
 

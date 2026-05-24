@@ -5,6 +5,7 @@ Every status transition goes through transition() — no direct status writes al
 All transitions are logged in workflow_logs for full auditability.
 """
 import asyncio
+import html as _html
 from datetime import datetime, timezone
 from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -136,13 +137,14 @@ async def _apply(
 
 
 def _sch_name(app: Application) -> str:
-    return app.scholarship.name if app.scholarship else "the scholarship"
+    name = app.scholarship.name if app.scholarship else "the scholarship"
+    return _html.escape(str(name))
 
 
 def _student_name(app: Application) -> str:
     if app.student and app.student.student_profile:
         p = app.student.student_profile
-        return f"{p.first_name} {p.last_name}"
+        return _html.escape(f"{p.first_name} {p.last_name}")
     return f"Student #{app.student_id}"
 
 

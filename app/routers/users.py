@@ -22,16 +22,29 @@ class RejectStudentRequest(BaseModel):
     remarks: str
 
 
+_LOCKED_PROFILE_FIELDS = {"college", "program", "year_level"}
+
+
 @router.patch("/me/profile", response_model=UserResponse)
 async def patch_my_profile(
     data: PatchProfileRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from fastapi import HTTPException as _HTTPException
     profile = current_user.student_profile
     if not profile:
         raise NotFoundError("StudentProfile", current_user.id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    # Block changes to academic fields once account is pending_verification or verified
+    if current_user.account_status in (AccountStatus.pending_verification, AccountStatus.verified):
+        locked = _LOCKED_PROFILE_FIELDS & updates.keys()
+        if locked:
+            raise _HTTPException(
+                status_code=403,
+                detail={"code": "FORBIDDEN", "message": f"Cannot modify {', '.join(sorted(locked))} after verification has started"},
+            )
+    for field, value in updates.items():
         setattr(profile, field, value)
     await db.commit()
     await db.refresh(current_user)
@@ -46,7 +59,9 @@ async def update_me(
 ):
     profile = current_user.student_profile
     if profile:
-        for field, value in data.model_dump(exclude_unset=True).items():
+        # Students cannot self-report GWA — it must come from official records via OSFA/admin
+        updates = {k: v for k, v in data.model_dump(exclude_unset=True).items() if k != "gwa"}
+        for field, value in updates.items():
             setattr(profile, field, value)
     await db.commit()
     await db.refresh(current_user)
