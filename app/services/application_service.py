@@ -165,6 +165,21 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
     if existing.scalar_one_or_none():
         raise ConflictError("Already applied to this scholarship")
 
+    # One active application per category (public/private)
+    if scholarship.category:
+        cat_conflict = await db.execute(
+            select(Application)
+            .join(Scholarship, Application.scholarship_id == Scholarship.id)
+            .where(
+                Application.student_id == student.id,
+                Application.status.notin_([ApplicationStatus.withdrawn, ApplicationStatus.rejected]),
+                Scholarship.category == scholarship.category,
+            )
+        )
+        if cat_conflict.scalar_one_or_none():
+            label = scholarship.category.value.capitalize()
+            raise ConflictError(f"You already have an active application for a {label} scholarship. You may only apply to one per category.")
+
     from sqlalchemy.exc import IntegrityError
     app = Application(student_id=student.id, scholarship_id=data.scholarship_id)
     db.add(app)
