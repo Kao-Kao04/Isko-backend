@@ -38,6 +38,12 @@ async def csrf_middleware(request: Request, call_next):
     if request.method in SAFE_METHODS or request.url.path in CSRF_EXEMPT:
         return await call_next(request)
 
+    # Requests with an explicit Authorization: Bearer header are safe from CSRF —
+    # cross-site attackers cannot set custom headers, so the JWT itself is sufficient.
+    if request.headers.get("Authorization", "").startswith("Bearer "):
+        return await call_next(request)
+
+    # Cookie-only sessions (legacy fallback): enforce double-submit cookie pattern
     cookie_token = request.cookies.get("csrf_token")
     header_token = request.headers.get("X-CSRF-Token")
 
