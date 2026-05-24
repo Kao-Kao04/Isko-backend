@@ -3,9 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.models.scholar import Scholar, ScholarStatus, SemesterRecord, ScholarStatusLog, SCHOLAR_STATUS_TRANSITIONS
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, SemesterRecordUpdate
 from app.exceptions import NotFoundError, ValidationError, ForbiddenError
+
+
+def _check_dept_scholar(scholar: Scholar, actor: User) -> None:
+    """Raise ForbiddenError if an OSFA staff member tries to mutate a scholar outside their dept."""
+    if actor.role == UserRole.osfa_staff and actor.department and scholar.scholarship:
+        if scholar.scholarship.category and scholar.scholarship.category.value != actor.department.value:
+            raise ForbiddenError()
 
 
 async def get_scholars_by_student(db: AsyncSession, student_id: int) -> list[Scholar]:
@@ -55,9 +62,14 @@ async def list_scholars(db: AsyncSession, user: User | None, page: int, page_siz
 
 
 async def get_scholar(db: AsyncSession, scholar_id: int) -> Scholar:
+    from app.models.scholarship import Scholarship as _Scholarship
     result = await db.execute(
         select(Scholar)
-        .options(selectinload(Scholar.semester_records), selectinload(Scholar.status_logs))
+        .options(
+            selectinload(Scholar.semester_records),
+            selectinload(Scholar.status_logs),
+            selectinload(Scholar.scholarship),
+        )
         .where(Scholar.id == scholar_id)
     )
     scholar = result.scalar_one_or_none()
@@ -73,6 +85,8 @@ async def update_scholar_status(
     actor: User | None = None,
 ) -> Scholar:
     scholar = await get_scholar(db, scholar_id)
+    if actor:
+        _check_dept_scholar(scholar, actor)
     old_status = scholar.status
 
     allowed = SCHOLAR_STATUS_TRANSITIONS.get(old_status, [])
@@ -208,8 +222,10 @@ async def _evaluate_retention(db: AsyncSession, scholar: Scholar, gwa: str | Non
             scholar.status = ScholarStatus.active
 
 
-async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterRecordCreate) -> SemesterRecord:
+async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterRecordCreate, actor: User | None = None) -> SemesterRecord:
     scholar = await get_scholar(db, scholar_id)
+    if actor:
+        _check_dept_scholar(scholar, actor)
     record = SemesterRecord(scholar_id=scholar_id, **data.model_dump())
     db.add(record)
     await db.flush()
@@ -220,8 +236,11 @@ async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterR
 
 
 async def update_semester_record(
-    db: AsyncSession, scholar_id: int, record_id: int, data: SemesterRecordUpdate
+    db: AsyncSession, scholar_id: int, record_id: int, data: SemesterRecordUpdate, actor: User | None = None
 ) -> SemesterRecord:
+    if actor:
+        scholar = await get_scholar(db, scholar_id)
+        _check_dept_scholar(scholar, actor)
     result = await db.execute(
         select(SemesterRecord).where(SemesterRecord.id == record_id, SemesterRecord.scholar_id == scholar_id)
     )
@@ -259,6 +278,7 @@ async def _get_semester_record(db: AsyncSession, scholar_id: int, record_id: int
 async def release_benefit(db: AsyncSession, scholar_id: int, record_id: int, actor: User) -> SemesterRecord:
     """OSFA marks a scholar's semester benefit as released."""
     scholar = await get_scholar(db, scholar_id)
+    _check_dept_scholar(scholar, actor)
     if scholar.status not in (ScholarStatus.active, ScholarStatus.probationary):
         raise ValidationError(
             f"Cannot release benefit — scholar status is '{scholar.status}'. "
@@ -281,6 +301,7 @@ async def submit_thank_you(db: AsyncSession, scholar_id: int, record_id: int, ac
         raise ForbiddenError("Only OSFA staff can confirm receipt of the thank you letter.")
 
     scholar = await get_scholar(db, scholar_id)
+    _check_dept_scholar(scholar, actor)
     record = await _get_semester_record(db, scholar_id, record_id)
     if not record.benefit_released:
         raise ValidationError("Thank you letter can only be confirmed after the benefit has been released.")

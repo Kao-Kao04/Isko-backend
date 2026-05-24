@@ -381,7 +381,10 @@ async def reschedule_interview(
     db: AsyncSession, application_id: int, actor: User, reason: str | None = None,
 ) -> Application:
     app = await _get_app(db, application_id)
-    _assert_student_owns(app, actor)
+    if actor.role == UserRole.student:
+        _assert_student_owns(app, actor)
+    else:
+        _assert_dept(app, actor)
     is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
 
     if app.sub_status not in (SubStatus.SCHEDULED, SubStatus.RESCHEDULED):

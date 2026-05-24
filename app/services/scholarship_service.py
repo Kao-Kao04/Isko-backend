@@ -319,7 +319,7 @@ async def generate_report_html(db: AsyncSession, scholarship_id: int) -> str:
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Scholarship Report — {sch.name}</title>
+  <title>Scholarship Report — {_html.escape(sch.name)}</title>
   <style>
     * {{ box-sizing:border-box; margin:0; padding:0; }}
     body {{ font-family:'Segoe UI',Arial,sans-serif; color:#111827; padding:40px 48px; }}
@@ -347,16 +347,16 @@ async def generate_report_html(db: AsyncSession, scholarship_id: int) -> str:
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">
     <div>
       <h1>Scholarship Report</h1>
-      <div class="sub">{sch.name} &nbsp;·&nbsp; Generated {fmt_date(datetime.now(timezone.utc))}</div>
+      <div class="sub">{_html.escape(sch.name)} &nbsp;·&nbsp; Generated {fmt_date(datetime.now(timezone.utc))}</div>
     </div>
     <div style="font-size:11px;color:#9ca3af;text-align:right;">IskoMo — OSFA Portal<br/>PUP Scholarship Management System</div>
   </div>
 
   <div class="meta">
-    <div class="meta-item"><span class="meta-label">Type</span><span class="meta-value">{sch.scholarship_type or '—'}</span></div>
+    <div class="meta-item"><span class="meta-label">Type</span><span class="meta-value">{_html.escape(sch.scholarship_type or '—')}</span></div>
     <div class="meta-item"><span class="meta-label">Category</span><span class="meta-value">{(sch.category.value if hasattr(sch.category,'value') else str(sch.category)).title() if sch.category else '—'}</span></div>
     <div class="meta-item"><span class="meta-label">Slots</span><span class="meta-value">{sch.slots or 'Unlimited'}</span></div>
-    <div class="meta-item"><span class="meta-label">Amount</span><span class="meta-value">{'₱{:,}'.format(sch.amount_raw) if sch.amount_raw else '—'} {sch.period or ''}</span></div>
+    <div class="meta-item"><span class="meta-label">Amount</span><span class="meta-value">{'₱{:,}'.format(sch.amount_raw) if sch.amount_raw else '—'} {_html.escape(sch.period or '')}</span></div>
     <div class="meta-item"><span class="meta-label">Deadline</span><span class="meta-value">{fmt_date(sch.deadline)}</span></div>
     <div class="meta-item"><span class="meta-label">Status</span><span class="meta-value">{(sch.status.value if hasattr(sch.status,'value') else str(sch.status)).upper()}</span></div>
   </div>

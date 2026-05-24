@@ -14,6 +14,7 @@ from app.utils.security import (
 )
 from app.exceptions import ConflictError, UnauthorizedError, ValidationError
 from app.config import settings
+from app.token_blacklist import is_revoked
 
 RESET_TOKEN_EXPIRE_MINUTES = 30
 RESET_COOLDOWN_SECONDS = 60
@@ -156,6 +157,11 @@ async def login(db: AsyncSession, data: LoginRequest) -> dict:
 
 
 async def refresh_tokens(db: AsyncSession, refresh_token: str) -> dict:
+    import hashlib
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+    if is_revoked(token_hash):
+        raise UnauthorizedError("Refresh token has been revoked")
+
     try:
         payload = decode_token(refresh_token)
         if payload.get("type") != "refresh":

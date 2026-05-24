@@ -1,7 +1,7 @@
 import asyncio
 import html as _html
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -97,7 +97,7 @@ async def submit_contact(
 @router.get("/api/osfa/contacts")
 async def osfa_list_contacts(
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_osfa_or_admin),
 ):
@@ -179,7 +179,7 @@ async def student_list_contacts(
 @router.get("/api/admin/contacts")
 async def list_contacts(
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_super_admin),
 ):

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -66,6 +66,13 @@ class AnnounceRequest(BaseModel):
     student_ids: list[int] | None = None
     link: str | None = Field(None, max_length=500)
     image_url: str | None = None
+
+    @field_validator("image_url")
+    @classmethod
+    def must_be_https(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith("https://"):
+            raise ValueError("image_url must be a secure https:// URL")
+        return v
 
 
 @router.post("/announce", status_code=200)

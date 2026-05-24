@@ -174,7 +174,9 @@ async def me(current_user=Depends(get_current_user)):
 
 
 @router.post("/change-password", status_code=200)
+@limiter.limit("5/minute")
 async def change_password(
+    request: Request,
     data: ChangePasswordRequest,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -205,7 +207,8 @@ async def reset_callback(code: str | None = None):
 
 
 @router.post("/reset-password", status_code=200)
-async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def reset_password(request: Request, data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     if len(data.new_password) < 8:
         raise ValidationError("Password must be at least 8 characters")
     await auth_service.reset_password(db, data.token, data.new_password)
@@ -213,7 +216,8 @@ async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(
 
 
 @router.post("/reset-password-token", status_code=200)
-async def reset_password_token(data: SupabaseResetPasswordRequest):
+@limiter.limit("5/minute")
+async def reset_password_token(request: Request, data: SupabaseResetPasswordRequest):
     if len(data.new_password) < 8:
         raise ValidationError("Password must be at least 8 characters")
     await auth_service.reset_password_with_supabase_token(data.access_token, data.new_password)

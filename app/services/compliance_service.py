@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.application import Application, CompletionRequirement
-from app.models.scholarship import ComplianceDocumentType
-from app.models.user import User
+from app.models.scholarship import ComplianceDocumentType, Scholarship
+from app.models.user import User, UserRole
 from app.exceptions import NotFoundError, ValidationError, ForbiddenError
 
 
@@ -62,8 +62,13 @@ async def submit_compliance_doc(
     if not app:
         raise NotFoundError("Application", application_id)
 
-    if actor.role.value == "student" and app.student_id != actor.id:
+    if actor.role == UserRole.student and app.student_id != actor.id:
         raise ForbiddenError()
+    if actor.role == UserRole.osfa_staff and actor.department:
+        sch_result = await db.execute(select(Scholarship).where(Scholarship.id == app.scholarship_id))
+        sch = sch_result.scalar_one_or_none()
+        if sch and sch.category and sch.category.value != actor.department.value:
+            raise ForbiddenError()
 
     from app.models.workflow import MainStatus, SubStatus
     if app.main_status != MainStatus.COMPLETION or app.sub_status not in (

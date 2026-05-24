@@ -55,6 +55,13 @@ class CompletionRequirementItem(BaseModel):
     requirement_type: str
     file_url: str | None = None
 
+    @field_validator("file_url")
+    @classmethod
+    def must_be_https(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith("https://"):
+            raise ValueError("file_url must be a secure https:// URL")
+        return v
+
 
 class SubmitCompletionRequest(BaseModel):
     requirements: list[CompletionRequirementItem]

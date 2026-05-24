@@ -57,20 +57,21 @@ async def update_status(
 async def add_semester_record(
     scholar_id: int,
     data: SemesterRecordCreate,
-    _: User = Depends(require_osfa_or_admin),
+    actor: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholar_service.add_semester_record(db, scholar_id, data)
+    return await scholar_service.add_semester_record(db, scholar_id, data, actor)
 
 
 @router.patch("/{scholar_id}/allowance", response_model=ScholarResponse)
 async def update_allowance(
     scholar_id: int,
     data: AllowanceUpdate,
-    _: User = Depends(require_osfa_or_admin),
+    actor: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
     scholar = await scholar_service.get_scholar(db, scholar_id)
+    scholar_service._check_dept_scholar(scholar, actor)
     update = data.model_dump(exclude_unset=True)
     for field, value in update.items():
         setattr(scholar, field, value)
@@ -83,7 +84,7 @@ async def update_semester_record(
     scholar_id: int,
     record_id: int,
     data: SemesterRecordUpdate,
-    _: User = Depends(require_osfa_or_admin),
+    actor: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await scholar_service.update_semester_record(db, scholar_id, record_id, data)
+    return await scholar_service.update_semester_record(db, scholar_id, record_id, data, actor)
