@@ -17,8 +17,8 @@ class Settings(BaseSettings):
         return v
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days — prevents iOS Safari refresh_token cookie issues
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""

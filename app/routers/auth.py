@@ -80,9 +80,9 @@ def _set_auth_cookies(response: Response, tokens: dict, remember_me: bool = Fals
     """
     from app.csrf import generate_csrf_token
     csrf = generate_csrf_token()
-    max_age_refresh = 60 * 60 * 24 * 30 if remember_me else 60 * 60 * 24 * 7
-    # Access + CSRF cookies: 30 days with remember_me, 8 hours otherwise (matches token expiry)
-    max_age_access  = 60 * 60 * 24 * 30 if remember_me else 60 * 60 * 8
+    # Always 30 days — prevents iOS Safari ITP from blocking short-lived SameSite=None cookies
+    max_age_refresh = 60 * 60 * 24 * 30
+    max_age_access  = 60 * 60 * 24 * 30
 
     response.set_cookie(
         "access_token", tokens["access_token"],
