@@ -14,6 +14,9 @@ def _strip_html(v: str | None) -> str | None:
 def _safe_url(v: str | None) -> str | None:
     if v is None:
         return v
+    # Allow base64 data URLs for cover images
+    if v.startswith("data:image/"):
+        return v
     if not v.startswith(("https://", "http://")):
         return None
     # Block internal/localhost URLs to prevent SSRF
