@@ -178,6 +178,12 @@ async def approve_student(
     except Exception:
         pass
 
+    try:
+        from app.utils.email import send_account_verified_email
+        await send_account_verified_email(user.email)
+    except Exception:
+        pass
+
     return await _get_student_or_404(db, user_id)
 
 
@@ -203,6 +209,12 @@ async def reject_student(
             "Account Verification Rejected",
             f"Your IskoMo account verification was not approved.{reason_text}",
         )
+    except Exception:
+        pass
+
+    try:
+        from app.utils.email import send_account_rejected_email
+        await send_account_rejected_email(user.email, data.remarks)
     except Exception:
         pass
 

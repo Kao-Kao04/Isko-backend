@@ -538,6 +538,23 @@ async def review_appeal(
 
     await db.commit()
 
+    # Fetch student email and scholarship name for email notification
+    _student_email: str | None = None
+    _sch_name_appeal: str | None = None
+    try:
+        from app.models.user import User as _User
+        _u = (await db.execute(select(_User).where(_User.id == appeal.student_id))).scalar_one_or_none()
+        _student_email = str(_u.email) if _u else None
+        _app_for_name = await db.execute(
+            select(Application).where(Application.id == application_id)
+        )
+        _a = _app_for_name.scalar_one_or_none()
+        if _a and _a.scholarship_id:
+            _s = (await db.execute(select(Scholarship).where(Scholarship.id == _a.scholarship_id))).scalar_one_or_none()
+            _sch_name_appeal = str(_s.name) if _s else None
+    except Exception:
+        pass
+
     # Notify student of appeal outcome
     try:
         if data.approved:
@@ -557,6 +574,13 @@ async def review_appeal(
             )
     except Exception:
         pass
+
+    if _student_email and _sch_name_appeal:
+        try:
+            from app.utils.email import send_appeal_outcome_email
+            await send_appeal_outcome_email(_student_email, _sch_name_appeal, data.approved, data.review_note)
+        except Exception:
+            pass
 
     await db.refresh(appeal)
     return appeal

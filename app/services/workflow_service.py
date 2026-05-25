@@ -440,7 +440,18 @@ async def complete_interview(
          f"Your interview for {_sch_name(app)} has been completed. You will be notified once a decision is made."),
         app.id,
     )
-    return await _commit_and_notify(db, app, notif)
+    result = await _commit_and_notify(db, app, notif)
+
+    try:
+        from app.models.user import User as _User
+        from app.utils.email import send_interview_completed_email
+        _u = (await db.execute(select(_User).where(_User.id == app.student_id))).scalar_one_or_none()
+        if _u:
+            await send_interview_completed_email(str(_u.email), _sch_name(app), bool(is_public))
+    except Exception:
+        pass
+
+    return result
 
 
 async def submit_evaluation(

@@ -213,13 +213,20 @@ async def _evaluate_retention(db: AsyncSession, scholar: Scholar, gwa: str | Non
                     from app.services.notification_service import create_notification
                     from app.models.scholarship import Scholarship as _Sch
                     _sch = (await db.execute(select(_Sch).where(_Sch.id == scholar.scholarship_id))).scalar_one_or_none()
-                    _sch_name = _sch.name if _sch else "your scholarship"
+                    _sch_name = str(_sch.name) if _sch else "your scholarship"
                     await create_notification(
                         db, scholar.student_id,
                         "Scholarship Status: Probationary",
                         f"Your scholarship ({_sch_name}) has been placed on probationary status due to: {reason_str}. Please maintain your academic performance.",
                         scholar.application_id,
                     )
+                except Exception:
+                    pass
+                try:
+                    from app.utils.email import send_probationary_email
+                    _u = (await db.execute(select(User).where(User.id == scholar.student_id))).scalar_one_or_none()
+                    if _u:
+                        await send_probationary_email(str(_u.email), _sch_name, reason_str)
                 except Exception:
                     pass
     else:
@@ -238,13 +245,20 @@ async def _evaluate_retention(db: AsyncSession, scholar: Scholar, gwa: str | Non
                 from app.services.notification_service import create_notification
                 from app.models.scholarship import Scholarship as _Sch
                 _sch = (await db.execute(select(_Sch).where(_Sch.id == scholar.scholarship_id))).scalar_one_or_none()
-                _sch_name = _sch.name if _sch else "your scholarship"
+                _sch_name = str(_sch.name) if _sch else "your scholarship"
                 await create_notification(
                     db, scholar.student_id,
                     "Probationary Status Lifted",
                     f"Great news! Your scholarship ({_sch_name}) probationary status has been lifted. You are now an active scholar again.",
                     scholar.application_id,
                 )
+            except Exception:
+                pass
+            try:
+                from app.utils.email import send_probation_lifted_email
+                _u = (await db.execute(select(User).where(User.id == scholar.student_id))).scalar_one_or_none()
+                if _u:
+                    await send_probation_lifted_email(str(_u.email), _sch_name)
             except Exception:
                 pass
 
@@ -323,13 +337,21 @@ async def release_benefit(db: AsyncSession, scholar_id: int, record_id: int, act
         from app.services.notification_service import create_notification
         from app.models.scholarship import Scholarship as _Sch
         _sch = (await db.execute(select(_Sch).where(_Sch.id == scholar.scholarship_id))).scalar_one_or_none()
-        _sch_name = _sch.name if _sch else "your scholarship"
+        _sch_name = str(_sch.name) if _sch else "your scholarship"
         await create_notification(
             db, scholar.student_id,
             "Scholarship Benefit Released",
             f"Your scholarship benefit/allowance for {_sch_name} has been released by OSFA. Please check with your scholarship office for details.",
             scholar.application_id,
         )
+    except Exception:
+        pass
+
+    try:
+        from app.utils.email import send_benefit_released_email
+        _u = (await db.execute(select(User).where(User.id == scholar.student_id))).scalar_one_or_none()
+        if _u and _sch_name:
+            await send_benefit_released_email(str(_u.email), _sch_name)
     except Exception:
         pass
 

@@ -199,3 +199,194 @@ async def send_verification_email(to_email: str, token: str) -> None:
         </div>
         """,
     )
+
+
+_OSFA_FOOTER = """
+<p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+    Polytechnic University of the Philippines — Office of Scholarship and Financial Assistance (OSFA)<br>
+    W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila<br>
+    Tel: 5335-1764 | 5335-1787 | 5335-1777 Local 339 | scholarship@pup.edu.ph
+</p>
+"""
+
+
+async def send_account_verified_email(to_email: str) -> None:
+    await _send(
+        to_email=to_email,
+        subject="Your IskoMo Account Has Been Verified",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">Account Verified!</h2>
+            <p>Congratulations! Your IskoMo account has been verified by the Office of Scholarship and Financial Assistance (OSFA).</p>
+            <p>You can now log in and apply for available scholarships.</p>
+            <a href="{settings.FRONTEND_URL}/student/iskolarships" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                Browse Scholarships
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
+async def send_account_rejected_email(to_email: str, remarks: str | None = None) -> None:
+    remarks_block = (
+        f'<p style="margin-top:12px;"><strong>Reason:</strong> {remarks}</p>'
+        if remarks else ""
+    )
+    await _send(
+        to_email=to_email,
+        subject="IskoMo Account Verification — Action Required",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">Account Verification Not Approved</h2>
+            <p>Unfortunately, your IskoMo account verification was not approved by OSFA.</p>
+            {remarks_block}
+            <p>Please review the reason above, update your registration documents, and resubmit for verification.
+               You may also contact OSFA directly for assistance.</p>
+            <a href="{settings.FRONTEND_URL}" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                Log In to IskoMo
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
+async def send_appeal_outcome_email(
+    to_email: str, scholarship_name: str, approved: bool, note: str | None = None
+) -> None:
+    if approved:
+        subject = f"Appeal Approved — {scholarship_name}"
+        heading = "Appeal Approved"
+        body = (
+            f"Good news! Your appeal for <strong>{scholarship_name}</strong> has been approved. "
+            "Your application has been reinstated and will be reviewed again by OSFA."
+        )
+        note_block = ""
+    else:
+        subject = f"Appeal Decision — {scholarship_name}"
+        heading = "Appeal Not Approved"
+        body = f"Your appeal for <strong>{scholarship_name}</strong> was reviewed but was not approved."
+        note_block = (
+            f'<p style="margin-top:12px;"><strong>Note from OSFA:</strong> {note}</p>'
+            if note else ""
+        )
+
+    await _send(
+        to_email=to_email,
+        subject=subject,
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">{heading}</h2>
+            <p>{body}</p>
+            {note_block}
+            <a href="{settings.FRONTEND_URL}/student/applications" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                View My Application
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
+async def send_probationary_email(to_email: str, scholarship_name: str, reason: str) -> None:
+    await _send(
+        to_email=to_email,
+        subject=f"Scholarship Status Update: Probationary — {scholarship_name}",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">Scholarship Status: Probationary</h2>
+            <p>Your scholarship <strong>{scholarship_name}</strong> has been placed on probationary status.</p>
+            <p><strong>Reason:</strong> {reason}</p>
+            <p>Please maintain your academic performance to avoid suspension. Log in to IskoMo to view your scholarship details and contact OSFA if you have any questions.</p>
+            <a href="{settings.FRONTEND_URL}/student/scholars" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                View My Scholar Status
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
+async def send_probation_lifted_email(to_email: str, scholarship_name: str) -> None:
+    await _send(
+        to_email=to_email,
+        subject=f"Good News: Probationary Status Lifted — {scholarship_name}",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">Probationary Status Lifted!</h2>
+            <p>Great news! Your probationary status for <strong>{scholarship_name}</strong> has been lifted.</p>
+            <p>You are now an active scholar again. Keep up the excellent academic performance!</p>
+            <a href="{settings.FRONTEND_URL}/student/scholars" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                View My Scholar Status
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
+async def send_benefit_released_email(to_email: str, scholarship_name: str) -> None:
+    await _send(
+        to_email=to_email,
+        subject=f"Scholarship Benefit Released — {scholarship_name}",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">Scholarship Benefit Released</h2>
+            <p>Your scholarship benefit/allowance for <strong>{scholarship_name}</strong> has been released by OSFA.</p>
+            <p>Please check with your scholarship office or log in to IskoMo for more details.</p>
+            <a href="{settings.FRONTEND_URL}/student/scholars" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                View My Scholar Record
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
+async def send_interview_completed_email(
+    to_email: str, scholarship_name: str, is_public: bool = False
+) -> None:
+    if is_public:
+        subject = f"Submission Received — {scholarship_name}"
+        heading = "Submission Received"
+        body = (
+            f"Your submission for <strong>{scholarship_name}</strong> has been received by OSFA. "
+            "You will be notified once a decision has been made."
+        )
+    else:
+        subject = f"Interview Completed — {scholarship_name}"
+        heading = "Interview Completed"
+        body = (
+            f"Your interview for <strong>{scholarship_name}</strong> has been completed. "
+            "OSFA will review and notify you once a decision has been made."
+        )
+
+    await _send(
+        to_email=to_email,
+        subject=subject,
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">{heading}</h2>
+            <p>{body}</p>
+            <a href="{settings.FRONTEND_URL}/student/applications" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                View My Application
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
