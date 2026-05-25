@@ -169,6 +169,20 @@ async def verify_compliance_doc(
 
     await db.commit()
     await db.refresh(doc)
+
+    # Notify student that their document was verified
+    if app:
+        try:
+            from app.services.notification_service import create_notification
+            await create_notification(
+                db, app.student_id,
+                "Compliance Document Verified",
+                f"Your document '{doc.requirement_type}' has been verified by OSFA.",
+                application_id,
+            )
+        except Exception:
+            pass
+
     return doc
 
 

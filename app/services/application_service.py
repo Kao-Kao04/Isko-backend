@@ -537,6 +537,27 @@ async def review_appeal(
         await append_audit(db, application_id, staff.id, "appeal_approved", from_status=ApplicationStatus.rejected, to_status=ApplicationStatus.pending, note=data.review_note)
 
     await db.commit()
+
+    # Notify student of appeal outcome
+    try:
+        if data.approved:
+            await create_notification(
+                db, appeal.student_id,
+                "Appeal Approved",
+                "Your appeal has been approved. Your application has been reinstated and will be reviewed again.",
+                application_id,
+            )
+        else:
+            note_text = f" Note: {data.review_note}" if data.review_note else ""
+            await create_notification(
+                db, appeal.student_id,
+                "Appeal Denied",
+                f"Your appeal was not approved.{note_text} Please contact OSFA for further assistance.",
+                application_id,
+            )
+    except Exception:
+        pass
+
     await db.refresh(appeal)
     return appeal
 

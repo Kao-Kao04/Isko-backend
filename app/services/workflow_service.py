@@ -431,7 +431,16 @@ async def complete_interview(
     app.interview_completed_at = _now()
     if notes:
         app.interview_notes = notes
-    return await _commit_and_notify(db, app)
+    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
+    notif = _queue_notification(
+        db, app.student_id,
+        "Submission Received" if is_public else "Interview Completed",
+        (f"Your submission for {_sch_name(app)} has been received by OSFA. You will be notified once a decision is made."
+         if is_public else
+         f"Your interview for {_sch_name(app)} has been completed. You will be notified once a decision is made."),
+        app.id,
+    )
+    return await _commit_and_notify(db, app, notif)
 
 
 async def submit_evaluation(
@@ -674,6 +683,11 @@ async def withdraw(
     app.sub_status = SubStatus.WITHDRAWN
     app.closed_at = _now()
     app.status = ApplicationStatus.withdrawn
+    await _notify_osfa_staff(
+        db, app,
+        "Application Withdrawn",
+        f"{_student_name(app)} has withdrawn their application for {_sch_name(app)}.",
+    )
     return await _commit_and_notify(db, app)
 
 
