@@ -167,6 +167,17 @@ async def approve_student(
     user.account_status = AccountStatus.verified
     user.rejection_remarks = None
     await db.commit()
+
+    try:
+        from app.services.notification_service import create_notification
+        await create_notification(
+            db, user.id,
+            "Account Verified",
+            "Your IskoMo account has been verified by OSFA. You can now apply for scholarships!",
+        )
+    except Exception:
+        pass
+
     return await _get_student_or_404(db, user_id)
 
 
@@ -183,4 +194,16 @@ async def reject_student(
     user.account_status = AccountStatus.rejected
     user.rejection_remarks = data.remarks
     await db.commit()
+
+    try:
+        from app.services.notification_service import create_notification
+        reason_text = f" Reason: {data.remarks}" if data.remarks else " Please contact OSFA for more information."
+        await create_notification(
+            db, user.id,
+            "Account Verification Rejected",
+            f"Your IskoMo account verification was not approved.{reason_text}",
+        )
+    except Exception:
+        pass
+
     return await _get_student_or_404(db, user_id)
