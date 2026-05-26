@@ -139,6 +139,19 @@ async def osfa_reply(
     inquiry.is_read = True
     await db.commit()
 
+    # In-app notification to student (works even if email fails)
+    if inquiry.student_user_id:
+        try:
+            from app.services.notification_service import create_notification
+            subject_preview = inquiry.subject or "your inquiry"
+            await create_notification(
+                db, inquiry.student_user_id,
+                "OSFA Replied to Your Inquiry",
+                f"OSFA has responded to your message: \"{subject_preview}\". Check the Contact OSFA page to view the reply.",
+            )
+        except Exception:
+            pass
+
     # Email reply to student
     from app.utils.email import _send
     safe_inquiry_name = _html.escape(str(inquiry.name))
