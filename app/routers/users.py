@@ -162,8 +162,8 @@ async def approve_student(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_student_or_404(db, user_id)
-    if user.account_status != AccountStatus.pending_verification:
-        raise ValidationError("Only students with pending_verification status can be approved")
+    if user.account_status not in (AccountStatus.pending_verification, AccountStatus.rejected):
+        raise ValidationError("Only students with pending review or rejected status can be approved")
     user.account_status = AccountStatus.verified
     user.rejection_remarks = None
     await db.commit()
@@ -219,3 +219,28 @@ async def reject_student(
         pass
 
     return await _get_student_or_404(db, user_id)
+
+
+@router.post("/send-registration-reminders", status_code=200)
+async def send_registration_reminders(
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(
+            User.role == UserRole.student,
+            User.account_status == AccountStatus.unregistered,
+        )
+    )
+    users = result.scalars().all()
+
+    from app.utils.email import send_registration_reminder_email
+    sent, failed = 0, 0
+    for u in users:
+        try:
+            await send_registration_reminder_email(str(u.email))
+            sent += 1
+        except Exception:
+            failed += 1
+
+    return {"sent": sent, "failed": failed, "total": len(users)}

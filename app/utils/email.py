@@ -356,6 +356,34 @@ async def send_benefit_released_email(to_email: str, scholarship_name: str) -> N
     )
 
 
+async def send_registration_reminder_email(to_email: str) -> None:
+    await _send(
+        to_email=to_email,
+        subject="Reminder: Complete Your IskoMo Registration",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+          <h2 style="color: #800000; margin: 0 0 8px;">Complete Your IskoMo Registration</h2>
+          <p style="color: #374151; line-height: 1.6;">
+            Hi! You created an IskoMo account but haven't submitted your registration documents yet.
+          </p>
+          <p style="color: #374151; line-height: 1.6;">
+            To access scholarship opportunities at PUP, please log in and complete your registration
+            by uploading the required documents for OSFA verification.
+          </p>
+          <a href="{settings.FRONTEND_URL}/student/registration"
+             style="display: inline-block; padding: 13px 32px; background: #800000; color: #fff;
+                    text-decoration: none; border-radius: 9px; font-weight: 700; font-size: 15px; margin: 16px 0;">
+            Complete Registration
+          </a>
+          <p style="color: #6b7280; font-size: 13px; margin-top: 8px; line-height: 1.6;">
+            If you no longer wish to use IskoMo, you can ignore this email.
+          </p>
+          {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
 async def send_interview_completed_email(
     to_email: str, scholarship_name: str, is_public: bool = False
 ) -> None:
