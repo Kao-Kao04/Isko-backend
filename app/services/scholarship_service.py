@@ -46,7 +46,7 @@ async def _attach_applicants_counts(db: AsyncSession, scholarships: list) -> Non
 
 
 async def _auto_close_expired(db: AsyncSession) -> None:
-    """Archive active scholarships whose deadline has passed or whose slots are all filled."""
+    """Archive active scholarships whose deadline has passed. Slots are a quota for OSFA evaluation, not an application cap."""
     now = datetime.now(timezone.utc)
 
     # Archive past-deadline scholarships
@@ -56,25 +56,7 @@ async def _auto_close_expired(db: AsyncSession) -> None:
         .values(status=ScholarshipStatus.archived)
     )
 
-    # Archive fully-booked scholarships (slots not null and all filled with non-withdrawn apps)
-    filled_subq = (
-        select(Application.scholarship_id, func.count(Application.id).label("cnt"))
-        .where(Application.status.notin_([ApplicationStatus.withdrawn]))
-        .group_by(Application.scholarship_id)
-        .subquery()
-    )
-    await db.execute(
-        update(Scholarship)
-        .where(
-            Scholarship.status == ScholarshipStatus.active,
-            Scholarship.slots.isnot(None),
-            Scholarship.id.in_(
-                select(filled_subq.c.scholarship_id)
-                .where(filled_subq.c.cnt >= Scholarship.slots)
-            ),
-        )
-        .values(status=ScholarshipStatus.archived)
-    )
+
     await db.commit()
 
 
