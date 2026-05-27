@@ -11,7 +11,6 @@ from app.dependencies import require_osfa_or_admin
 from app.models.user import User, UserRole
 from app.models.application import Application
 from app.models.scholarship import Scholarship
-from app.models.workflow import SubStatus, MainStatus
 from app.services import report_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -136,8 +135,6 @@ async def interview_calendar(
         )
         .where(
             Application.interview_datetime.isnot(None),
-            Application.main_status == MainStatus.INTERVIEW,
-            Application.sub_status != SubStatus.INTERVIEW_COMPLETED,
         )
         .order_by(Application.interview_datetime)
     )
