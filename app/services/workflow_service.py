@@ -9,14 +9,14 @@ import html as _html
 from datetime import datetime, timezone
 from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.config import settings
 
 from app.models.application import Application, ApplicationStatus, WorkflowLog, CompletionRequirement
 from app.models.notification import Notification
 from app.models.scholar import Scholar, ScholarStatus, ScholarStatusLog
-from app.models.scholarship import ComplianceDocumentType
+from app.models.scholarship import ComplianceDocumentType, Scholarship, ScholarshipStatus
 from app.models.workflow import MainStatus, SubStatus, ALLOWED_TRANSITIONS, can_transition, is_terminal
 from app.models.user import User, UserRole
 from app.exceptions import ValidationError, NotFoundError, ForbiddenError
@@ -573,6 +573,23 @@ async def release_decision(
             student_id=app.student_id,
             scholarship_id=app.scholarship_id,
         ))
+
+    # Auto-close scholarship when awarded slots are filled
+    if app.scholarship_id:
+        sch_row = await db.execute(
+            select(Scholarship).where(Scholarship.id == app.scholarship_id)
+        )
+        sch = sch_row.scalar_one_or_none()
+        if sch and sch.slots is not None and sch.status == ScholarshipStatus.active:
+            awarded = await db.execute(
+                select(func.count(Scholar.id)).where(
+                    Scholar.scholarship_id == app.scholarship_id,
+                    Scholar.status.notin_([ScholarStatus.terminated, ScholarStatus.graduated]),
+                )
+            )
+            # +1 for the scholar we just added (not yet flushed)
+            if (awarded.scalar() or 0) + 1 >= sch.slots:
+                sch.status = ScholarshipStatus.closed  # type: ignore[assignment]
 
     app.status = ApplicationStatus.approved
     await _apply(db, app, actor, MainStatus.COMPLETION, SubStatus.PENDING_REQUIREMENTS)
