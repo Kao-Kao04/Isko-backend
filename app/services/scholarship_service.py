@@ -4,8 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
 from sqlalchemy.orm import selectinload
 from app.models.scholarship import Scholarship, ScholarshipRequirement, ScholarshipStatus
-from app.models.application import Application, ApplicationStatus
-from app.models.scholar import Scholar, ScholarStatus
+from app.models.application import Application, ApplicationStatus, WorkflowLog, CompletionRequirement
+from app.models.scholar import Scholar, ScholarStatus, SemesterRecord, ScholarStatusLog
+from app.models.document import ApplicationDocument
+from app.models.audit import AuditEntry
+from app.models.appeal import Appeal
+from app.models.message import ApplicationMessage
 from app.models.user import User, UserRole
 from app.schemas.scholarship import ScholarshipCreate, ScholarshipUpdate, ScholarshipStatusUpdate
 from app.exceptions import NotFoundError, ForbiddenError, ValidationError
@@ -206,6 +210,28 @@ async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User, 
             f"Cannot delete this scholarship — it has {active_app_count} active application(s). "
             "Archive it instead, or force-delete to remove all related applications too."
         )
+
+    if active_app_count > 0:
+        # Load every nested relationship so SQLAlchemy async can cascade-delete properly
+        apps_result = await db.execute(
+            select(Application)
+            .options(
+                selectinload(Application.documents),
+                selectinload(Application.audit_entries),
+                selectinload(Application.appeal),
+                selectinload(Application.workflow_logs),
+                selectinload(Application.completion_requirements),
+                selectinload(Application.messages),
+                selectinload(Application.scholar)
+                    .selectinload(Scholar.semester_records),
+                selectinload(Application.scholar)
+                    .selectinload(Scholar.status_logs),
+            )
+            .where(Application.scholarship_id == scholarship_id)
+        )
+        for app in apps_result.scalars().all():
+            await db.delete(app)
+        await db.flush()
 
     await db.delete(scholarship)
     await db.commit()
