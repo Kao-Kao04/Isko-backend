@@ -329,12 +329,17 @@ async def approve_gwa_request(
     if not p or p.gwa_request_status != "pending":
         raise ValidationError("No pending GWA request for this student")
 
+    old_proof = p.gwa_proof_path
     p.gwa                   = p.pending_gwa
     p.pending_gwa           = None
     p.gwa_proof_path        = None
     p.gwa_request_status    = "approved"
     p.gwa_rejection_remarks = None
     await db.commit()
+
+    if old_proof:
+        from app.utils.storage import delete_file
+        await delete_file(str(old_proof))
 
     try:
         from app.services.notification_service import create_notification
