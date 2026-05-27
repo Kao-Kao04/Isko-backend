@@ -52,8 +52,12 @@ class Application(Base):
     completion_submitted_at = Column(DateTime(timezone=True), nullable=True)
     closed_at               = Column(DateTime(timezone=True), nullable=True)
 
+    # Student essay on application
+    essay_text              = Column(Text, nullable=True)
+
     # Interview metadata
     interview_location      = Column(String, nullable=True)
+    interview_instructions  = Column(Text, nullable=True)
     interview_notes         = Column(Text, nullable=True)
 
     # Decision metadata

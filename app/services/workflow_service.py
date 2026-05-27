@@ -321,6 +321,8 @@ async def schedule_interview(
     app.interview_scheduled_at = _now()
     if location:
         app.interview_location = location
+    if note is not None:
+        app.interview_instructions = note  # type: ignore[assignment]
     dt_str = interview_datetime.strftime('%B %d, %Y at %I:%M %p')
     notif = _queue_notification(
         db, app.student_id,
@@ -478,7 +480,13 @@ async def move_to_review(db: AsyncSession, application_id: int, actor: User) -> 
     if app.sub_status != SubStatus.EVALUATED:
         raise ValidationError("Cannot move to review — evaluation not yet submitted.")
     await _apply(db, app, actor, MainStatus.DECISION, SubStatus.UNDER_REVIEW)
-    return await _commit_and_notify(db, app)
+    notif = _queue_notification(
+        db, app.student_id,
+        "Application Under Review",
+        f"Your application for {_sch_name(app)} is now under review by OSFA. You will be notified once a decision has been made.",
+        app.id,
+    )
+    return await _commit_and_notify(db, app, notif)
 
 
 async def release_decision(

@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import require_super_admin
 from app.models.user import User, UserRole, DepartmentEnum, AccountStatus
 from app.models.application import Application
+from app.models.scholar import Scholar, ScholarStatus
 from app.models.workflow import MainStatus
 from app.models.scholarship import Scholarship
 from app.models.audit import AuditEntry
@@ -166,6 +167,12 @@ async def get_stats(
             "verified":            await count(select(func.count(User.id)).where(User.role == UserRole.student, User.account_status == AccountStatus.verified)),
             "rejected":            await count(select(func.count(User.id)).where(User.role == UserRole.student, User.account_status == AccountStatus.rejected)),
             "unregistered":        await count(select(func.count(User.id)).where(User.role == UserRole.student, User.account_status == AccountStatus.unregistered)),
+            "scholars":            await count(select(func.count(Scholar.student_id.distinct())).where(
+                Scholar.status.in_([
+                    ScholarStatus.active, ScholarStatus.probationary,
+                    ScholarStatus.under_review, ScholarStatus.on_leave, ScholarStatus.suspended,
+                ])
+            )),
         },
         "staff": {
             "total":  await count(select(func.count(User.id)).where(User.role == UserRole.osfa_staff)),

@@ -66,6 +66,7 @@ async def get_workflow_status(
         completion_submitted_at=app.completion_submitted_at,
         closed_at=app.closed_at,
         interview_location=app.interview_location,
+        interview_instructions=str(app.interview_instructions) if app.interview_instructions else None,
         decision_remarks=app.decision_remarks,
         logs=[WorkflowLogResponse.model_validate(log) for log in app.workflow_logs],
     )
@@ -180,6 +181,7 @@ async def schedule_interview(
         "sub_status": app.sub_status,
         "interview_datetime": app.interview_datetime,
         "interview_location": app.interview_location,
+        "interview_instructions": app.interview_instructions,
     }
 
 

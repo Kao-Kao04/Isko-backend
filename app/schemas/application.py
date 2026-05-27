@@ -6,6 +6,7 @@ from app.models.application import ApplicationStatus, EvalStatus
 
 class ApplicationCreate(BaseModel):
     scholarship_id: int
+    essay_text: str | None = None
 
 
 class ApplicationResubmit(BaseModel):
@@ -136,6 +137,7 @@ class ApplicationResponse(BaseModel):
     # Workflow status — primary source of truth for application stage
     main_status: str | None = None
     sub_status: str | None = None
+    essay_text: str | None = None
     interview_notes: str | None = None
     appeal: AppealResponse | None = None
     student: ApplicationStudentInfo | None = None

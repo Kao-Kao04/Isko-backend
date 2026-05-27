@@ -136,7 +136,7 @@ async def interview_calendar(
         )
         .where(
             Application.interview_datetime.isnot(None),
-            Application.sub_status == SubStatus.SCHEDULED,
+            Application.sub_status.in_([SubStatus.SCHEDULED, SubStatus.RESCHEDULED]),
         )
         .order_by(Application.interview_datetime)
     )

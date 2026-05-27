@@ -181,7 +181,7 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
             raise ConflictError(f"You already have an active application for a {label} scholarship. You may only apply to one per category.")
 
     from sqlalchemy.exc import IntegrityError
-    app = Application(student_id=student.id, scholarship_id=data.scholarship_id)
+    app = Application(student_id=student.id, scholarship_id=data.scholarship_id, essay_text=data.essay_text)
     db.add(app)
     try:
         await db.flush()

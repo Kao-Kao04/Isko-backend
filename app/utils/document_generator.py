@@ -11,16 +11,19 @@ def _now_ph() -> str:
 
 _BASE_STYLE = """
 <style>
-  body { font-family: Arial, sans-serif; max-width: 680px; margin: 40px auto; color: #1a1a1a; font-size: 14px; line-height: 1.6; }
-  h1 { color: #800000; font-size: 18px; margin-bottom: 4px; }
-  h2 { font-size: 15px; color: #333; margin-top: 24px; }
-  .header { text-align: center; margin-bottom: 32px; border-bottom: 2px solid #800000; padding-bottom: 16px; }
-  .header img { height: 60px; }
-  .school { font-size: 13px; color: #555; }
-  .field { margin: 8px 0; }
+  body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; font-size: 13.5px; line-height: 1.7; }
+  h1 { color: #800000; font-size: 17px; margin-bottom: 4px; }
+  h2 { font-size: 14px; color: #333; margin-top: 24px; }
+  .header { text-align: center; margin-bottom: 28px; border-bottom: 3px double #800000; padding-bottom: 14px; }
+  .header-republic { font-size: 11px; font-weight: bold; color: #333; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .header-univ { font-size: 17px; font-weight: bold; color: #800000; margin-bottom: 2px; }
+  .header-office { font-size: 11.5px; font-weight: bold; color: #333; margin-bottom: 1px; }
+  .header-contact { font-size: 11px; color: #555; margin-top: 6px; }
+  .header-tagline { font-size: 10px; font-style: italic; color: #800000; margin-top: 5px; letter-spacing: 0.03em; }
+  .field { margin: 7px 0; }
   .label { font-weight: bold; display: inline-block; min-width: 180px; }
-  .section { margin-top: 24px; }
-  .conditions li { margin: 6px 0; }
+  .section { margin-top: 22px; }
+  .conditions li { margin: 5px 0; }
   .signature-block { margin-top: 48px; display: flex; gap: 80px; }
   .sig-line { border-top: 1px solid #333; padding-top: 4px; min-width: 200px; font-size: 12px; color: #555; }
   .footer { margin-top: 40px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
@@ -30,10 +33,14 @@ _BASE_STYLE = """
 
 _PUP_HEADER = """
 <div class="header">
-  <div style="font-weight:bold;font-size:16px;color:#800000;">POLYTECHNIC UNIVERSITY OF THE PHILIPPINES</div>
-  <div class="school">Office of Scholarship and Financial Assistance (OSFA)</div>
-  <div class="school">W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila</div>
-  <div class="school">Tel: 5335-1764 | 5335-1787 | 5335-1777 Local 339 &nbsp;|&nbsp; scholarship@pup.edu.ph</div>
+  <div class="header-republic">REPUBLIC OF THE PHILIPPINES</div>
+  <div class="header-univ">POLYTECHNIC UNIVERSITY OF THE PHILIPPINES</div>
+  <div class="header-office">OFFICE OF THE VICE PRESIDENT FOR STUDENT AFFAIRS AND SERVICES</div>
+  <div class="header-office">OFFICE OF SCHOLARSHIP AND FINANCIAL ASSISTANCE</div>
+  <div class="header-contact">W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila 1016</div>
+  <div class="header-contact">Direct Line: 5335-1764 &nbsp;|&nbsp; Trunk Line: 5335-1787 or 5335-1777 local 339</div>
+  <div class="header-contact">Website: www.pup.edu.ph &nbsp;|&nbsp; Email: scholarship@pup.edu.ph</div>
+  <div class="header-tagline">A LEADING COMPREHENSIVE POLYTECHNIC UNIVERSITY IN ASIA</div>
 </div>
 """
 

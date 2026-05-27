@@ -105,6 +105,7 @@ class WorkflowStatusResponse(BaseModel):
     completion_submitted_at: datetime | None
     closed_at: datetime | None
     interview_location: str | None
+    interview_instructions: str | None = None
     decision_remarks: str | None
     logs: list[WorkflowLogResponse] = []
 

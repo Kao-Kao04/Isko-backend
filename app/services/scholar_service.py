@@ -271,8 +271,26 @@ async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterR
     db.add(record)
     await db.flush()
     await _evaluate_retention(db, scholar, data.gwa, data.has_grade_below_2_5)
+    # Capture IDs before commit — async SA expires attributes after commit
+    _student_id     = int(scholar.student_id)      # type: ignore[arg-type]
+    _application_id = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
+    _scholarship_id = int(scholar.scholarship_id)  # type: ignore[arg-type]
     await db.commit()
     await db.refresh(record)
+    try:
+        from app.services.notification_service import create_notification
+        from app.models.scholarship import Scholarship as _Sch
+        _sch = (await db.execute(select(_Sch).where(_Sch.id == _scholarship_id))).scalar_one_or_none()
+        _sch_name = str(_sch.name) if _sch else "your scholarship"
+        gwa_part = f" GWA: {data.gwa}." if data.gwa else ""
+        await create_notification(
+            db, _student_id,
+            "Semester Record Added",
+            f"OSFA has recorded your grades for {data.semester} {data.academic_year} ({_sch_name}).{gwa_part}",
+            _application_id,
+        )
+    except Exception:
+        pass
     return record
 
 
