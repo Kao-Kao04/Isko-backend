@@ -309,7 +309,8 @@ async def submit_gwa_request(
         name = f"{p.first_name} {p.last_name}".strip()
         for staff in osfa_users:
             await create_notification(db, staff.id, "GWA Update Request",  # type: ignore[arg-type]
-                f"{name} submitted a GWA update request (GWA: {gwa.strip()}).")
+                f"{name} submitted a GWA update request (GWA: {gwa.strip()}).",
+                link="/registrations")
     except Exception:
         pass
 
@@ -344,7 +345,8 @@ async def approve_gwa_request(
     try:
         from app.services.notification_service import create_notification
         await create_notification(db, user.id, "GWA Update Approved",  # type: ignore[arg-type]
-            f"Your GWA update to {p.gwa} has been verified and approved by OSFA.")
+            f"Your GWA update to {p.gwa} has been verified and approved by OSFA.",
+            link="/profile")
     except Exception:
         pass
 
@@ -371,7 +373,8 @@ async def reject_gwa_request(
         from app.services.notification_service import create_notification
         reason = f" Reason: {data.remarks}" if data.remarks else ""
         await create_notification(db, user.id, "GWA Update Rejected",  # type: ignore[arg-type]
-            f"Your GWA update request was not approved by OSFA.{reason}")
+            f"Your GWA update request was not approved by OSFA.{reason}",
+            link="/profile")
     except Exception:
         pass
 
