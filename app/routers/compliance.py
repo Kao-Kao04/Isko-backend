@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -35,9 +35,18 @@ class ComplianceDocTypeResponse(BaseModel):
 
 
 class ComplianceDocSubmit(BaseModel):
-    requirement_type: str   # must match a ComplianceDocumentType.name
+    requirement_type: str = Field(..., max_length=200)
     file_url: str | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
+
+    @field_validator('file_url')
+    @classmethod
+    def validate_file_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not v.startswith('https://'):
+            raise ValueError("file_url must be a secure https:// URL")
+        return v
 
 
 class ComplianceDocResponse(BaseModel):

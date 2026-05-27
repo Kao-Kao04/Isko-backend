@@ -197,7 +197,7 @@ async def get_inbox(
     except Exception as exc:
         import logging
         logging.getLogger(__name__).error("inbox query failed: %s", exc, exc_info=True)
-        return {"items": [], "total": 0, "error": str(exc)}
+        return {"items": [], "total": 0}
 
     result = []
     for app, last_at, msg_count, unread in rows:

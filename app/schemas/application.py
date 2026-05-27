@@ -24,10 +24,10 @@ class EvalStatusUpdate(BaseModel):
 
 
 class EvalScoreUpdate(BaseModel):
-    financial_need: int
-    essay: int
-    interview: int
-    community: int
+    financial_need: int = Field(..., ge=0, le=5)
+    essay:          int = Field(..., ge=0, le=5)
+    interview:      int = Field(..., ge=0, le=5)
+    community:      int = Field(..., ge=0, le=5)
 
 
 class AppealCreate(BaseModel):

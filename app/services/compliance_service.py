@@ -64,11 +64,12 @@ async def submit_compliance_doc(
 
     if actor.role == UserRole.student and app.student_id != actor.id:
         raise ForbiddenError()
-    if actor.role == UserRole.osfa_staff and actor.department:
+    if actor.role == UserRole.osfa_staff:
+        # Department is required for OSFA staff — null department means no access
         sch_result = await db.execute(select(Scholarship).where(Scholarship.id == app.scholarship_id))
         sch = sch_result.scalar_one_or_none()
-        if sch and sch.category and sch.category.value != actor.department.value:
-            raise ForbiddenError()
+        if not actor.department or not sch or sch.category.value != actor.department.value:
+            raise ForbiddenError("Department mismatch — you cannot access this application.")
 
     from app.models.workflow import MainStatus, SubStatus
     if app.main_status != MainStatus.COMPLETION or app.sub_status not in (

@@ -36,7 +36,14 @@ def _sb():
     return get_supabase()
 
 
+ALLOWED_EMAIL_DOMAINS = {"iskolarngbayan.pup.edu.ph", "gmail.com"}
+
+
 async def signup(db: AsyncSession, data: SignUpRequest) -> dict:
+    _domain = data.email.split("@")[-1].lower()
+    if _domain not in ALLOWED_EMAIL_DOMAINS:
+        raise ValidationError("Only PUP institutional and Gmail addresses are accepted.")
+
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise ConflictError("Email already registered")
@@ -196,18 +203,7 @@ async def send_password_reset(db: AsyncSession, email: str) -> None:
         return
 
     if settings.ENVIRONMENT == "development":
-        from jose import jwt
-        token = jwt.encode(
-            {
-                "sub": str(user.id),
-                "type": "password_reset",
-                "exp": datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
-            },
-            settings.SECRET_KEY,
-            algorithm=settings.ALGORITHM,
-        )
-        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-        logger.info("DEV — password reset link for %s: %s", email, reset_url)
+        logger.info("Password reset email sent to %s", email)
         return
 
     import secrets

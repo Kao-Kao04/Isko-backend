@@ -119,6 +119,9 @@ async def get_application(db: AsyncSession, application_id: int, user: User) -> 
     app = await _get_application(db, application_id)
     if user.role == UserRole.student and app.student_id != user.id:
         raise ForbiddenError()
+    # Scrub OSFA-internal fields from student view
+    if user.role == UserRole.student:
+        app.interview_notes = None  # type: ignore[assignment]
     return app
 
 
@@ -295,6 +298,10 @@ async def withdraw_application(db: AsyncSession, application_id: int, student: U
     app = await _get_application(db, application_id)
     if app.student_id != student.id:
         raise ForbiddenError()
+    # Block if application is in a terminal workflow state
+    if app.main_status in (MainStatus.DECISION, MainStatus.COMPLETION):
+        if app.sub_status in (SubStatus.APPROVED, SubStatus.REJECTED, SubStatus.COMPLETED):
+            raise ValidationError("Cannot withdraw an application that has already been decided.")
     if app.status not in (ApplicationStatus.pending, ApplicationStatus.incomplete):
         raise ValidationError("Can only withdraw Pending or Incomplete applications")
 
