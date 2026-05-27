@@ -6,14 +6,14 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_super_admin, require_osfa_or_admin
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
+from app.schemas.common import PaginatedResponse
+from app.utils.pagination import paginate
+from app.services import notification_service
 
 
 class BroadcastRequest(BaseModel):
     title: str = Field(..., max_length=200)
     body: str = Field(..., max_length=2000)
-from app.schemas.common import PaginatedResponse
-from app.utils.pagination import paginate
-from app.services import notification_service
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
