@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,6 +90,26 @@ async def announce(
         image_url=data.image_url,
     )
     return {"message": f"Announcement sent to {count} students."}
+
+
+@router.post("/media/upload")
+async def upload_announcement_image(
+    file: UploadFile = File(...),
+    _: User = Depends(require_osfa_or_admin),
+):
+    content_type = file.content_type or "application/octet-stream"
+    if content_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+        from app.exceptions import ValidationError
+        raise ValidationError("Image must be JPEG, PNG, WEBP, or GIF")
+    file_bytes = await file.read()
+    if len(file_bytes) > 5 * 1024 * 1024:
+        from app.exceptions import ValidationError
+        raise ValidationError("Image must be under 5 MB")
+    from app.utils.storage import upload_file, get_signed_url
+    path = await upload_file(file_bytes, file.filename or "image.jpg", content_type)
+    # 1-year signed URL — announcement images are not sensitive
+    url = await get_signed_url(path, expires_in=31_536_000)
+    return {"url": url}
 
 
 @router.delete("/{notification_id}", status_code=204)
