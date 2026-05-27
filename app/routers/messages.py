@@ -123,7 +123,7 @@ async def send_message(
                     title=f"New message from {student_name}",
                     body=f"Application #{application_id}: {data.body.strip()[:80]}{'…' if len(data.body.strip()) > 80 else ''}",
                     application_id=application_id,
-                    link=f"/applicants/{application_id}",
+                    link=f"/applicants/{application_id}?tab=messages",
                 )
             except Exception:
                 pass  # Never block message delivery due to notification failure
@@ -136,7 +136,7 @@ async def send_message(
                 title="New reply from OSFA",
                 body=f"OSFA replied to your message on application #{application_id}.",
                 application_id=application_id,
-                link=f"/student/applications/{application_id}",
+                link=f"/applications/{application_id}",
             )
         except Exception:
             pass
