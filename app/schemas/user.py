@@ -13,6 +13,9 @@ class StudentProfileResponse(BaseModel):
     program: str
     year_level: int
     gwa: str | None
+    pending_gwa:           str | None = None
+    gwa_request_status:    str | None = None
+    gwa_rejection_remarks: str | None = None
     # Address
     street_barangay:   str | None = None
     city_municipality: str | None = None

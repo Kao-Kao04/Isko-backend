@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -244,3 +244,130 @@ async def send_registration_reminders(
             failed += 1
 
     return {"sent": sent, "failed": failed, "total": len(users)}
+
+
+# ─── GWA Request endpoints ────────────────────────────────────────────────────
+
+class GwaRejectRequest(BaseModel):
+    remarks: str | None = None
+
+
+@router.get("/{user_id}/gwa-proof")
+async def get_gwa_proof(
+    user_id: int,
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_student_or_404(db, user_id)
+    p = user.student_profile
+    if not p or not p.gwa_proof_path:
+        raise NotFoundError("GWA proof", user_id)
+    from app.utils.storage import get_signed_url
+    url = await get_signed_url(str(p.gwa_proof_path))
+    return {"url": url}
+
+
+@router.post("/me/gwa-request", status_code=200)
+async def submit_gwa_request(
+    gwa: str = Form(...),
+    proof: UploadFile = File(...),
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    p = current_user.student_profile
+    if not p:
+        raise ValidationError("Student profile not found")
+
+    content_type = proof.content_type or "application/octet-stream"
+    if content_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
+        raise ValidationError("Proof must be an image (JPG/PNG/WEBP) or PDF")
+
+    from app.utils.storage import upload_file, delete_file
+    file_bytes = await proof.read()
+    if len(file_bytes) > 5 * 1024 * 1024:
+        raise ValidationError("File must be under 5 MB")
+
+    # Delete old proof if exists
+    if p.gwa_proof_path:
+        await delete_file(str(p.gwa_proof_path))
+
+    path = await upload_file(file_bytes, proof.filename or "proof", content_type)
+    p.pending_gwa           = gwa.strip()
+    p.gwa_proof_path        = path
+    p.gwa_request_status    = "pending"
+    p.gwa_rejection_remarks = None
+    await db.commit()
+
+    # Notify OSFA
+    try:
+        from app.models.user import User as _User
+        osfa_result = await db.execute(
+            select(_User).where(_User.role == UserRole.osfa_staff, _User.is_active == True)
+        )
+        osfa_users = osfa_result.scalars().all()
+        from app.services.notification_service import create_notification
+        name = f"{p.first_name} {p.last_name}".strip()
+        for staff in osfa_users:
+            await create_notification(db, staff.id, "GWA Update Request",  # type: ignore[arg-type]
+                f"{name} submitted a GWA update request (GWA: {gwa.strip()}).")
+    except Exception:
+        pass
+
+    await db.refresh(current_user, ["student_profile"])
+    from app.schemas.user import UserResponse
+    return UserResponse.model_validate(current_user)
+
+
+@router.patch("/{user_id}/gwa-request/approve", status_code=200)
+async def approve_gwa_request(
+    user_id: int,
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_student_or_404(db, user_id)
+    p = user.student_profile
+    if not p or p.gwa_request_status != "pending":
+        raise ValidationError("No pending GWA request for this student")
+
+    p.gwa                   = p.pending_gwa
+    p.pending_gwa           = None
+    p.gwa_proof_path        = None
+    p.gwa_request_status    = "approved"
+    p.gwa_rejection_remarks = None
+    await db.commit()
+
+    try:
+        from app.services.notification_service import create_notification
+        await create_notification(db, user.id, "GWA Update Approved",  # type: ignore[arg-type]
+            f"Your GWA update to {p.gwa} has been verified and approved by OSFA.")
+    except Exception:
+        pass
+
+    return {"status": "approved", "gwa": p.gwa}
+
+
+@router.patch("/{user_id}/gwa-request/reject", status_code=200)
+async def reject_gwa_request(
+    user_id: int,
+    data: GwaRejectRequest,
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_student_or_404(db, user_id)
+    p = user.student_profile
+    if not p or p.gwa_request_status != "pending":
+        raise ValidationError("No pending GWA request for this student")
+
+    p.gwa_request_status    = "rejected"
+    p.gwa_rejection_remarks = data.remarks
+    await db.commit()
+
+    try:
+        from app.services.notification_service import create_notification
+        reason = f" Reason: {data.remarks}" if data.remarks else ""
+        await create_notification(db, user.id, "GWA Update Rejected",  # type: ignore[arg-type]
+            f"Your GWA update request was not approved by OSFA.{reason}")
+    except Exception:
+        pass
+
+    return {"status": "rejected"}

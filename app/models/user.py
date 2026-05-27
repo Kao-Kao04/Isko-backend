@@ -57,7 +57,11 @@ class StudentProfile(Base):
     college = Column(String, nullable=False)
     program = Column(String, nullable=False)
     year_level = Column(Integer, nullable=False)
-    gwa = Column(String)
+    gwa                    = Column(String)
+    pending_gwa            = Column(String, nullable=True)
+    gwa_proof_path         = Column(String, nullable=True)
+    gwa_request_status     = Column(String, nullable=True)   # pending | approved | rejected
+    gwa_rejection_remarks  = Column(String, nullable=True)
 
     # Address
     street_barangay   = Column(String, nullable=True)
