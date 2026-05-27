@@ -5,6 +5,7 @@ from sqlalchemy import select, func, update
 from sqlalchemy.orm import selectinload
 from app.models.scholarship import Scholarship, ScholarshipRequirement, ScholarshipStatus
 from app.models.application import Application, ApplicationStatus
+from app.models.scholar import Scholar, ScholarStatus
 from app.models.user import User, UserRole
 from app.schemas.scholarship import ScholarshipCreate, ScholarshipUpdate, ScholarshipStatusUpdate
 from app.exceptions import NotFoundError, ForbiddenError, ValidationError
@@ -45,6 +46,25 @@ async def _attach_applicants_counts(db: AsyncSession, scholarships: list) -> Non
         s.applicants_count = counts.get(s.id, 0)
 
 
+async def _attach_awarded_counts(db: AsyncSession, scholarships: list) -> None:
+    """Count non-terminal scholars per scholarship — this is what reduces the available slots."""
+    if not scholarships:
+        return
+    ids = [s.id for s in scholarships]
+    terminal = {ScholarStatus.terminated, ScholarStatus.graduated}
+    rows = await db.execute(
+        select(Scholar.scholarship_id, func.count(Scholar.id))
+        .where(
+            Scholar.scholarship_id.in_(ids),
+            Scholar.status.notin_(list(terminal)),
+        )
+        .group_by(Scholar.scholarship_id)
+    )
+    counts = {row[0]: row[1] for row in rows}
+    for s in scholarships:
+        s.awarded_count = counts.get(s.id, 0)
+
+
 async def _auto_close_expired(db: AsyncSession) -> None:
     """Archive active scholarships whose deadline has passed. Slots are a quota for OSFA evaluation, not an application cap."""
     now = datetime.now(timezone.utc)
@@ -75,6 +95,7 @@ async def list_scholarships(db: AsyncSession, user: User, page: int, page_size: 
     result = await db.execute(q)
     scholarships = list(result.scalars().all())
     await _attach_applicants_counts(db, scholarships)
+    await _attach_awarded_counts(db, scholarships)
     return scholarships, total
 
 
@@ -90,6 +111,7 @@ async def get_scholarship(db: AsyncSession, scholarship_id: int, user: User | No
         if scholarship.status not in (ScholarshipStatus.active, ScholarshipStatus.closed):
             raise NotFoundError("Scholarship", scholarship_id)
     await _attach_applicants_counts(db, [scholarship])
+    await _attach_awarded_counts(db, [scholarship])
     return scholarship
 
 

@@ -129,6 +129,7 @@ class ScholarshipResponse(BaseModel):
     max_semesters: int | None
     requires_thank_you_letter: bool
     applicants_count: int = 0
+    awarded_count: int = 0
     requirements: List[RequirementResponse] = []
     created_at: datetime
 
