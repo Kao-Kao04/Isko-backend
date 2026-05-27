@@ -40,7 +40,7 @@ _PUP_HEADER = """
   <div class="header-contact">W-119 PUP A. Mabini Campus, Anonas Street, Sta. Mesa, Manila 1016</div>
   <div class="header-contact">Direct Line: 5335-1764 &nbsp;|&nbsp; Trunk Line: 5335-1787 or 5335-1777 local 339</div>
   <div class="header-contact">Website: www.pup.edu.ph &nbsp;|&nbsp; Email: scholarship@pup.edu.ph</div>
-  <div class="header-tagline">A LEADING COMPREHENSIVE POLYTECHNIC UNIVERSITY IN ASIA</div>
+  <div class="header-tagline">THE COUNTRY'S 1st POLYTECHNIC</div>
 </div>
 """
 
