@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_osfa_or_admin, require_verified_student
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.exceptions import NotFoundError, ForbiddenError
 from app.schemas.application import (
     ApplicationCreate, ApplicationStatusUpdate, EvalStatusUpdate, EvalScoreUpdate,
     AppealCreate, AppealReview, ApplicationResponse, AuditEntryResponse, AppealResponse,
@@ -132,16 +135,21 @@ class InternalNotesRequest(BaseModel):
 async def update_internal_notes(
     application_id: int,
     data: InternalNotesRequest,
-    current_user=Depends(require_osfa_or_admin),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import select as _sel
     from app.models.application import Application as _App
-    result = await db.execute(_sel(_App).where(_App.id == application_id))
+    result = await db.execute(
+        select(_App).options(selectinload(_App.scholarship))
+        .where(_App.id == application_id)
+    )
     app = result.scalar_one_or_none()
     if not app:
-        from app.exceptions import NotFoundError
         raise NotFoundError("Application", application_id)
+    # OSFA staff are scoped to their own department's scholarships
+    if current_user.role == UserRole.osfa_staff and current_user.department:
+        if not app.scholarship or app.scholarship.category != current_user.department.value:
+            raise ForbiddenError("You do not have access to this application")
     app.interview_notes = data.notes
     await db.commit()
     return {"message": "Notes saved.", "notes": data.notes}

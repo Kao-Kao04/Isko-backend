@@ -44,6 +44,11 @@ async def broadcast_announcement(db: AsyncSession, title: str, body: str) -> int
         [{"user_id": uid, "title": title, "body": body} for uid in student_ids],
     )
     await db.commit()
+
+    from app.websocket import manager
+    for uid in student_ids:
+        await manager.send(uid, {"type": "notification", "title": title, "body": body})
+
     return len(student_ids)
 
 
@@ -122,6 +127,11 @@ async def send_announcement(
         return 0
     await db.execute(_insert(Notification), [{"user_id": uid, "title": title, "body": body, "link": link, "image_url": image_url} for uid in ids])
     await db.commit()
+
+    from app.websocket import manager
+    for uid in ids:
+        await manager.send(uid, {"type": "notification", "title": title, "body": body, "link": link, "image_url": image_url})
+
     return len(ids)
 
 

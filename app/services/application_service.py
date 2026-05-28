@@ -45,7 +45,11 @@ def _check_eligibility(scholarship: Scholarship, student_profile) -> None:
     if scholarship.eligible_year_levels and student_profile.year_level not in scholarship.eligible_year_levels:
         raise ValidationError("Not eligible: year level restriction")
     # GWA check — lower is better in the Philippine grading system
-    if scholarship.min_gwa and student_profile.gwa:
+    if scholarship.min_gwa:
+        if not student_profile.gwa:
+            raise ValidationError(
+                f"Not eligible: GWA is not set. Minimum requirement is {scholarship.min_gwa}"
+            )
         try:
             student_gwa = float(student_profile.gwa)
             required_gwa = float(scholarship.min_gwa)
@@ -54,7 +58,9 @@ def _check_eligibility(scholarship: Scholarship, student_profile) -> None:
                     f"Not eligible: GWA of {student_profile.gwa} does not meet the minimum requirement of {scholarship.min_gwa}"
                 )
         except (ValueError, TypeError):
-            pass  # Unparseable GWA — skip the check rather than blocking the student
+            raise ValidationError(
+                f"Not eligible: GWA value '{student_profile.gwa}' could not be verified against the minimum requirement of {scholarship.min_gwa}"
+            )
 
 
 async def list_applications(

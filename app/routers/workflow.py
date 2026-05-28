@@ -171,7 +171,11 @@ async def schedule_interview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Student or OSFA/admin can schedule the interview."""
+    """Student (own application only) or OSFA/admin can schedule the interview."""
+    if current_user.role not in (UserRole.student, UserRole.osfa_staff, UserRole.super_admin):
+        raise ForbiddenError("Not authorized to schedule interviews")
+    app_check = await _get_app_or_404(db, application_id)
+    _assert_can_view(app_check, current_user)
     app = await workflow_service.schedule_interview(
         db, application_id, current_user,
         data.interview_datetime, data.location, data.note,
@@ -256,6 +260,8 @@ async def submit_requirements(
     current_user: User = Depends(require_verified_student),
     db: AsyncSession = Depends(get_db),
 ):
+    app = await _get_app_or_404(db, application_id)
+    _assert_can_view(app, current_user)
     app = await workflow_service.submit_completion_requirements(
         db, application_id, current_user,
         [r.model_dump() for r in data.requirements],
@@ -283,5 +289,7 @@ async def withdraw(
     current_user: User = Depends(require_verified_student),
     db: AsyncSession = Depends(get_db),
 ):
+    app = await _get_app_or_404(db, application_id)
+    _assert_can_view(app, current_user)
     app = await workflow_service.withdraw(db, application_id, current_user, data.reason)
     return {"main_status": app.main_status, "sub_status": app.sub_status, "closed_at": app.closed_at}

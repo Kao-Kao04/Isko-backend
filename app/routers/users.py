@@ -162,8 +162,8 @@ async def approve_student(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_student_or_404(db, user_id)
-    if user.account_status not in (AccountStatus.pending_verification, AccountStatus.rejected):
-        raise ValidationError("Only students with pending review or rejected status can be approved")
+    if user.account_status != AccountStatus.pending_verification:
+        raise ValidationError("Only students with pending_verification status can be approved")
     user.account_status = AccountStatus.verified
     user.rejection_remarks = None
     await db.commit()
@@ -333,14 +333,18 @@ async def approve_gwa_request(
     old_proof = p.gwa_proof_path
     p.gwa                   = p.pending_gwa
     p.pending_gwa           = None
-    p.gwa_proof_path        = None
     p.gwa_request_status    = "approved"
     p.gwa_rejection_remarks = None
-    await db.commit()
-
+    # Clear proof path only after successfully deleting the file so the DB
+    # never points to a non-existent object if the delete fails mid-flight.
     if old_proof:
         from app.utils.storage import delete_file
-        await delete_file(str(old_proof))
+        try:
+            await delete_file(str(old_proof))
+        except Exception:
+            pass
+    p.gwa_proof_path = None
+    await db.commit()
 
     try:
         from app.services.notification_service import create_notification
