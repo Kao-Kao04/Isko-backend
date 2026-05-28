@@ -273,6 +273,16 @@ async def submit_requirements(
     return {"main_status": app.main_status, "sub_status": app.sub_status}
 
 
+@router.post("/{application_id}/accept-requirements", status_code=200)
+async def accept_requirements(
+    application_id: int,
+    current_user: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    app = await workflow_service.accept_completion_requirements(db, application_id, current_user)
+    return {"main_status": app.main_status, "sub_status": app.sub_status}
+
+
 @router.post("/{application_id}/finalize", status_code=200)
 async def finalize(
     application_id: int,

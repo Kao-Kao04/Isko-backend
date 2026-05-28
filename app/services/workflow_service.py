@@ -656,6 +656,27 @@ async def submit_completion_requirements(
     return await _commit_and_notify(db, app)
 
 
+async def accept_completion_requirements(
+    db: AsyncSession,
+    application_id: int,
+    actor: User,
+) -> Application:
+    """OSFA records physical/in-person requirement submission on behalf of the student."""
+    app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
+    if app.sub_status != SubStatus.PENDING_REQUIREMENTS:
+        raise ValidationError("Not in PENDING_REQUIREMENTS state.")
+    await _apply(db, app, actor, MainStatus.COMPLETION, SubStatus.REQUIREMENTS_SUBMITTED)
+    app.completion_submitted_at = _now()
+    notif = _queue_notification(
+        db, app.student_id,
+        "Completion Documents Received",
+        f"OSFA has recorded your completion documents for {_sch_name(app)}. Your submission is now under review.",
+        app.id,
+    )
+    return await _commit_and_notify(db, app, notif)
+
+
 async def finalize(
     db: AsyncSession, application_id: int, actor: User, note: str | None = None,
 ) -> Application:
