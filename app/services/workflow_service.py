@@ -719,6 +719,8 @@ async def withdraw(
 
     if is_terminal(app.main_status, app.sub_status):
         raise ValidationError("Cannot withdraw — application is already in a terminal state.")
+    if app.main_status == MainStatus.COMPLETION:
+        raise ValidationError("Cannot withdraw an approved application. Please contact OSFA directly.")
 
     await _log(db, app, actor, MainStatus.WITHDRAWN, SubStatus.WITHDRAWN, reason)
     app.main_status = MainStatus.WITHDRAWN
