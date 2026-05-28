@@ -169,6 +169,7 @@ async def _notify_osfa_staff(db: AsyncSession, app: Application, title: str, bod
 
 async def initialize_workflow(db: AsyncSession, application_id: int, actor: User) -> Application:
     app = await _get_app(db, application_id)
+    _assert_dept(app, actor)
     if app.main_status is not None:
         raise ValidationError("Workflow already initialized for this application.")
     await _log(db, app, actor, MainStatus.APPLICATION, SubStatus.SUBMITTED)
