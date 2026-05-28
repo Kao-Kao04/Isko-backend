@@ -70,6 +70,7 @@ async def list_applications(
     page_size: int,
     status: str | None = None,
     search: str | None = None,
+    scholarship_id: int | None = None,
 ):
     q = select(Application)
     if user.role == UserRole.student:
@@ -78,6 +79,8 @@ async def list_applications(
         q = (q
             .join(Scholarship, Application.scholarship_id == Scholarship.id)
             .where(Scholarship.category == user.department.value))
+    if scholarship_id:
+        q = q.where(Application.scholarship_id == scholarship_id)
     if status:
         try:
             q = q.where(Application.status == ApplicationStatus(status))
@@ -125,9 +128,10 @@ async def get_application(db: AsyncSession, application_id: int, user: User) -> 
     app = await _get_application(db, application_id)
     if user.role == UserRole.student and app.student_id != user.id:
         raise ForbiddenError()
-    # Scrub OSFA-internal fields from student view
     if user.role == UserRole.student:
         app.interview_notes = None  # type: ignore[assignment]
+    if user.role == UserRole.osfa_staff and user.department:
+        _check_department_ownership(app, user)
     return app
 
 
@@ -508,6 +512,10 @@ async def review_appeal(
     appeal = result.scalar_one_or_none()
     if not appeal:
         raise NotFoundError("Appeal")
+
+    app_for_dept = await _get_application(db, application_id)
+    if staff.role == UserRole.osfa_staff and staff.department:
+        _check_department_ownership(app_for_dept, staff)
 
     appeal.status = AppealStatus.approved if data.approved else AppealStatus.denied
     appeal.review_note = data.review_note
