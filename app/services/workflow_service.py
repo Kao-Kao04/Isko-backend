@@ -431,8 +431,6 @@ async def complete_interview(
         raise ValidationError(msg)
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.INTERVIEW_COMPLETED, notes)
     app.interview_completed_at = _now()
-    if notes:
-        app.interview_notes = notes
     is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
     notif = _queue_notification(
         db, app.student_id,
