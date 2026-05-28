@@ -376,8 +376,17 @@ async def reject_gwa_request(
     if not p or p.gwa_request_status != "pending":
         raise ValidationError("No pending GWA request for this student")
 
+    old_proof = p.gwa_proof_path
     p.gwa_request_status    = "rejected"
     p.gwa_rejection_remarks = data.remarks
+    p.pending_gwa           = None
+    p.gwa_proof_path        = None
+    if old_proof:
+        from app.utils.storage import delete_file
+        try:
+            await delete_file(str(old_proof))
+        except Exception:
+            pass
     await db.commit()
 
     try:
