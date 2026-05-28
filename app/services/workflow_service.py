@@ -300,13 +300,21 @@ async def schedule_interview(
         allowed_states = (SubStatus.NOT_SCHEDULED, SubStatus.RESCHEDULED, SubStatus.SCHEDULED)
     else:
         allowed_states = (SubStatus.NOT_SCHEDULED, SubStatus.RESCHEDULED)
+    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
+
     if app.sub_status not in allowed_states:
-        raise ValidationError(f"Cannot schedule interview from state {app.sub_status}")
+        raise ValidationError(
+            f"Cannot set submission deadline from state {app.sub_status}"
+            if is_public else
+            f"Cannot schedule interview from state {app.sub_status}"
+        )
 
     if interview_datetime <= _now():
-        raise ValidationError("Interview must be scheduled for a future date and time")
-
-    is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
+        raise ValidationError(
+            "Submission deadline must be set to a future date and time."
+            if is_public else
+            "Interview must be scheduled for a future date and time"
+        )
 
     # Location required for private (in-person interview); optional for public (document submission)
     if not is_public and not location:
