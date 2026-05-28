@@ -26,6 +26,7 @@ async def _get_app_or_404(db: AsyncSession, application_id: int) -> Application:
         .options(
             selectinload(Application.workflow_logs),
             selectinload(Application.completion_requirements),
+            selectinload(Application.scholarship),
         )
         .where(Application.id == application_id)
     )
@@ -36,9 +37,12 @@ async def _get_app_or_404(db: AsyncSession, application_id: int) -> Application:
 
 
 def _assert_can_view(app: Application, user: User) -> None:
-    """Students can only view their own application's workflow."""
+    """Students can only view their own workflow. OSFA staff are scoped to their dept."""
     if user.role == UserRole.student and app.student_id != user.id:
         raise ForbiddenError("You do not have access to this application")
+    if user.role == UserRole.osfa_staff and user.department and app.scholarship:
+        if app.scholarship.category != user.department:
+            raise ForbiddenError("You do not have access to this application")
 
 
 # ── Status & Logs ─────────────────────────────────────────────────────────────
