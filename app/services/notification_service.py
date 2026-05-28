@@ -1,9 +1,12 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, insert
 
 from app.models.notification import Notification
 from app.models.user import User, UserRole
 from app.exceptions import NotFoundError
+from app.schemas.notification import _derive_route
 
 
 async def create_notification(
@@ -26,6 +29,10 @@ async def create_notification(
         "body": body,
         "application_id": application_id,
         "link": link,
+        "route": _derive_route(title, application_id, link),
+        "image_url": None,
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return notif
 
@@ -53,7 +60,9 @@ async def broadcast_announcement(db: AsyncSession, title: str, body: str) -> int
 
 
 async def list_notifications(db: AsyncSession, user_id: int, page: int, page_size: int):
-    q = select(Notification).where(Notification.user_id == user_id).order_by(Notification.created_at.desc())
+    q = select(Notification).where(Notification.user_id == user_id).order_by(
+        Notification.is_read.asc(), Notification.created_at.desc()
+    )
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar()
     q = q.offset((page - 1) * page_size).limit(page_size)
@@ -68,7 +77,7 @@ async def mark_read(db: AsyncSession, user_id: int, notification_id: int) -> Not
     notif = result.scalar_one_or_none()
     if not notif:
         raise NotFoundError("Notification", notification_id)
-    notif.is_read = True
+    notif.is_read = True  # type: ignore[assignment]
     await db.commit()
     await db.refresh(notif)
     return notif

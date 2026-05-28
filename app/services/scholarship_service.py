@@ -187,7 +187,10 @@ async def update_status(db: AsyncSession, scholarship_id: int, data: Scholarship
 async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User, force: bool = False) -> None:
     result = await db.execute(
         select(Scholarship)
-        .options(selectinload(Scholarship.requirements))
+        .options(
+            selectinload(Scholarship.requirements),
+            selectinload(Scholarship.compliance_doc_types),
+        )
         .where(Scholarship.id == scholarship_id)
     )
     scholarship = result.scalar_one_or_none()
@@ -206,9 +209,10 @@ async def delete_scholarship(db: AsyncSession, scholarship_id: int, user: User, 
     active_app_count = app_count_result.scalar()
 
     if active_app_count > 0 and not force:
+        archive_hint = "" if scholarship.status == ScholarshipStatus.archived else " Archive it instead, or"
         raise ValidationError(
-            f"Cannot delete this scholarship — it has {active_app_count} active application(s). "
-            "Archive it instead, or force-delete to remove all related applications too."
+            f"Cannot delete this scholarship — it has {active_app_count} active application(s).{archive_hint}"
+            " Force-delete to permanently remove this scholarship and all its applications."
         )
 
     if active_app_count > 0:
