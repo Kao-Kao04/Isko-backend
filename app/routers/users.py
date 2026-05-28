@@ -162,8 +162,8 @@ async def approve_student(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_student_or_404(db, user_id)
-    if user.account_status != AccountStatus.pending_verification:
-        raise ValidationError("Only students with pending_verification status can be approved")
+    if user.account_status not in (AccountStatus.pending_verification, AccountStatus.rejected):
+        raise ValidationError("Only students with pending or rejected status can be approved")
     user.account_status = AccountStatus.verified
     user.rejection_remarks = None
     await db.commit()
@@ -277,6 +277,13 @@ async def submit_gwa_request(
     p = current_user.student_profile
     if not p:
         raise ValidationError("Student profile not found")
+
+    try:
+        gwa_val = float(gwa.strip())
+        if not (1.00 <= gwa_val <= 5.00):
+            raise ValidationError("GWA must be between 1.00 and 5.00")
+    except (ValueError, TypeError):
+        raise ValidationError("GWA must be a valid number (e.g., 1.75)")
 
     content_type = proof.content_type or "application/octet-stream"
     if content_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):

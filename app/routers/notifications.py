@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_super_admin, require_osfa_or_admin
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.exceptions import ForbiddenError
 from app.schemas.notification import NotificationResponse
 from app.schemas.common import PaginatedResponse
 from app.utils.pagination import paginate
@@ -78,9 +79,17 @@ class AnnounceRequest(BaseModel):
 @router.post("/announce", status_code=200)
 async def announce(
     data: AnnounceRequest,
-    _: User = Depends(require_osfa_or_admin),
+    current_user: User = Depends(require_osfa_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    if (current_user.role == UserRole.osfa_staff and current_user.department
+            and data.target == "by_scholarship" and data.scholarship_id):
+        from sqlalchemy import select as _sel
+        from app.models.scholarship import Scholarship
+        sch_row = await db.execute(_sel(Scholarship).where(Scholarship.id == data.scholarship_id))
+        sch = sch_row.scalar_one_or_none()
+        if sch and sch.category != current_user.department:
+            raise ForbiddenError("Cannot send announcements for scholarships outside your department")
     count = await notification_service.send_announcement(
         db, data.title, data.body, data.target,
         scholarship_id=data.scholarship_id,
