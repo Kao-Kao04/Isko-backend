@@ -288,6 +288,7 @@ async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterR
             f"OSFA has recorded your grades for {data.semester} {data.academic_year} ({_sch_name}).{gwa_part}",
             _application_id,
         )
+        await db.commit()
     except Exception:
         pass
     return record
@@ -317,6 +318,22 @@ async def update_semester_record(
         )
     await db.commit()
     await db.refresh(record)
+    try:
+        from app.services.notification_service import create_notification
+        from app.models.scholarship import Scholarship as _Sch
+        scholar2 = await get_scholar(db, scholar_id)
+        _sch = (await db.execute(select(_Sch).where(_Sch.id == scholar2.scholarship_id))).scalar_one_or_none()
+        _sch_name = str(_sch.name) if _sch else "your scholarship"
+        gwa_part = f" GWA: {record.gwa}." if record.gwa else ""
+        await create_notification(
+            db, int(scholar2.student_id),  # type: ignore[arg-type]
+            "Semester Record Updated",
+            f"OSFA has updated your grades for {record.semester} {record.academic_year} ({_sch_name}).{gwa_part}",
+            int(scholar2.application_id) if scholar2.application_id else None,  # type: ignore[arg-type]
+        )
+        await db.commit()
+    except Exception:
+        pass
     return record
 
 
