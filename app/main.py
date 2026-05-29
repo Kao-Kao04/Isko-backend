@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.limiter import limiter
 from app.csrf import csrf_middleware
-from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws, workflow, compliance, dashboard, messages, contact, public
+from app.routers import auth, users, scholarships, applications, documents, notifications, scholars, reports, admin, registration, ws, workflow, compliance, dashboard, messages, contact, public, academic_periods
 
 # ── Structured logging ───────────────────────────────────────────────────────
 LOG_LEVEL = "INFO" if settings.ENVIRONMENT == "production" else "DEBUG"
@@ -235,6 +235,7 @@ app.include_router(workflow.router)
 app.include_router(compliance.router)
 app.include_router(contact.router)
 app.include_router(public.router)
+app.include_router(academic_periods.router)
 app.include_router(ws.router)
 
 

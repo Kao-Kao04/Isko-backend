@@ -10,3 +10,4 @@ from app.models.system_audit import SystemAuditLog
 from app.models.revoked_token import RevokedToken
 from app.models.registration import RegistrationDocument, RegistrationDocType
 from app.models.message import ApplicationMessage, ContactInquiry
+from app.models.academic_period import AcademicPeriod, GwaSubmission, SemesterType, GwaSubmissionStatus  # noqa: F401

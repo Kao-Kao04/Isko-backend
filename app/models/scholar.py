@@ -61,6 +61,7 @@ class Scholar(Base):
     scholarship  = relationship("Scholarship",  foreign_keys=[scholarship_id])
     semester_records = relationship("SemesterRecord", back_populates="scholar", cascade="all, delete-orphan")
     status_logs      = relationship("ScholarStatusLog", back_populates="scholar", order_by="ScholarStatusLog.created_at", cascade="all, delete-orphan")
+    gwa_submissions  = relationship("GwaSubmission", back_populates="scholar", cascade="all, delete-orphan")
 
 
 class SemesterRecord(Base):

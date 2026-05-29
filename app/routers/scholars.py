@@ -1,16 +1,21 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from app.database import get_db
-from app.dependencies import require_osfa_or_admin, require_student
+from app.dependencies import require_osfa_or_admin, require_student, get_current_user
 from app.models.user import User
 from app.schemas.scholar import (
     ScholarResponse, ScholarStatusUpdate, AllowanceUpdate,
     SemesterRecordCreate, SemesterRecordUpdate, SemesterRecordResponse,
 )
+from app.schemas.academic_period import GwaSubmissionResponse, GwaSubmissionReview, GwaSubmissionReject
 from app.schemas.common import PaginatedResponse
 from app.utils.pagination import paginate
 from app.services import scholar_service
+from app.services import academic_period_service
+from app.utils.storage import get_signed_url, upload_file
+from app.utils.file_validation import validate_file_bytes
 
 router = APIRouter(prefix="/api/scholars", tags=["scholars"])
 
@@ -88,3 +93,71 @@ async def update_semester_record(
     db: AsyncSession = Depends(get_db),
 ):
     return await scholar_service.update_semester_record(db, scholar_id, record_id, data, actor)
+
+
+# ── GWA Submission endpoints ──────────────────────────────────────────────────
+
+def _sub_with_url(sub, url: str) -> GwaSubmissionResponse:
+    out = GwaSubmissionResponse.model_validate(sub)
+    out.proof_url = url
+    return out
+
+
+@router.post("/{scholar_id}/gwa-submissions", response_model=GwaSubmissionResponse, status_code=201)
+async def submit_gwa(
+    scholar_id: int,
+    period_id: int = Form(...),
+    declared_gwa: Optional[str] = Form(None),
+    has_grade_below_2_5: bool = Form(False),
+    proof: UploadFile = File(...),
+    student: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    contents = await proof.read()
+    validate_file_bytes(contents, proof.filename or "")
+    proof_path = await upload_file(contents, proof.filename or "proof", proof.content_type or "application/octet-stream")
+    sub = await academic_period_service.submit_gwa(
+        db, scholar_id, period_id, declared_gwa, has_grade_below_2_5, proof_path, student
+    )
+    url = await get_signed_url(str(sub.proof_path))
+    return _sub_with_url(sub, url)
+
+
+@router.get("/{scholar_id}/gwa-submissions", response_model=list[GwaSubmissionResponse])
+async def list_gwa_submissions(
+    scholar_id: int,
+    actor: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subs = await academic_period_service.list_gwa_submissions(db, scholar_id, actor)
+    results = []
+    for sub in subs:
+        url = await get_signed_url(str(sub.proof_path))
+        results.append(_sub_with_url(sub, url))
+    return results
+
+
+@router.patch("/{scholar_id}/gwa-submissions/{sub_id}/approve", response_model=GwaSubmissionResponse)
+async def approve_gwa_submission(
+    scholar_id: int,
+    sub_id: int,
+    data: GwaSubmissionReview,
+    actor: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    sub = await academic_period_service.approve_gwa_submission(db, scholar_id, sub_id, data, actor)
+    url = await get_signed_url(str(sub.proof_path))
+    return _sub_with_url(sub, url)
+
+
+@router.patch("/{scholar_id}/gwa-submissions/{sub_id}/reject", response_model=GwaSubmissionResponse)
+async def reject_gwa_submission(
+    scholar_id: int,
+    sub_id: int,
+    data: GwaSubmissionReject,
+    actor: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    sub = await academic_period_service.reject_gwa_submission(db, scholar_id, sub_id, data, actor)
+    url = await get_signed_url(str(sub.proof_path))
+    return _sub_with_url(sub, url)
