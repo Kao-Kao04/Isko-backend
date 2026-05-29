@@ -1,18 +1,16 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from app.database import get_db
-from app.dependencies import require_super_admin, require_osfa_or_admin, require_student, get_current_user
+from app.dependencies import require_super_admin, require_osfa_or_admin, get_current_user
 from app.models.user import User
 from app.schemas.academic_period import (
     AcademicPeriodCreate, AcademicPeriodResponse,
-    GwaSubmissionResponse, GwaSubmissionReview, GwaSubmissionReject,
+    GwaSubmissionResponse,
 )
 from app.services import academic_period_service
-from app.utils.storage import get_signed_url, upload_file
-from app.utils.file_validation import validate_file_bytes
-from app.exceptions import ValidationError
+from app.utils.storage import get_signed_url
 
 router = APIRouter(prefix="/api/academic-periods", tags=["academic-periods"])
 
@@ -33,7 +31,7 @@ async def get_current_period(
 
 @router.get("", response_model=list[AcademicPeriodResponse])
 async def list_periods(
-    _: User = Depends(require_osfa_or_admin),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     return await academic_period_service.list_periods(db)
@@ -67,6 +65,6 @@ async def list_pending_submissions(
     subs = await academic_period_service.list_pending_gwa_submissions(db, actor)
     results = []
     for sub in subs:
-        url = await get_signed_url(sub.proof_path)
+        url = await get_signed_url(str(sub.proof_path))
         results.append(_with_url(sub, url))
     return results

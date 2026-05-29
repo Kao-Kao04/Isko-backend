@@ -269,19 +269,24 @@ async def approve_gwa_submission(
         from app.services.scholar_service import _evaluate_retention
         await _evaluate_retention(db, scholar, confirmed_gwa, has_below)
 
+    # Cache ORM attribute values before commit — after commit all objects are expired
+    # and accessing them in async context raises MissingGreenlet.
+    _student_id   = int(scholar.student_id)        # type: ignore[arg-type]
+    _app_id       = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
+    _sch_name     = str(scholar.scholarship.name) if scholar.scholarship else "your scholarship"
+    _period_label = period.label
+    _gwa_part     = f" Confirmed GWA: {confirmed_gwa}." if confirmed_gwa else ""
+
     await db.commit()
     await db.refresh(sub)
 
-    # Notify student
     try:
         from app.services.notification_service import create_notification
-        sch_name = scholar.scholarship.name if scholar.scholarship else "your scholarship"
-        gwa_part = f" Confirmed GWA: {confirmed_gwa}." if confirmed_gwa else ""
         await create_notification(
-            db, int(scholar.student_id),  # type: ignore[arg-type]
+            db, _student_id,
             "GWA Submission Approved",
-            f"OSFA has verified your grade submission for {period.label} ({sch_name}).{gwa_part}",
-            int(scholar.application_id) if scholar.application_id else None,  # type: ignore[arg-type]
+            f"OSFA has verified your grade submission for {_period_label} ({_sch_name}).{_gwa_part}",
+            _app_id,
         )
         await db.commit()
     except Exception:
@@ -310,6 +315,13 @@ async def reject_gwa_submission(
     if not scholar:
         raise NotFoundError("Scholar", scholar_id)
 
+    # Cache ORM attribute values before commit — after commit all objects are expired
+    # and accessing them in async context raises MissingGreenlet.
+    _student_id   = int(scholar.student_id)        # type: ignore[arg-type]
+    _app_id       = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
+    _sch_name     = str(scholar.scholarship.name) if scholar.scholarship else "your scholarship"
+    _period_label = sub.period.label
+
     sub.status = GwaSubmissionStatus.rejected
     sub.rejection_remarks = data.remarks
     sub.reviewed_at = datetime.now(timezone.utc)
@@ -319,14 +331,12 @@ async def reject_gwa_submission(
 
     try:
         from app.services.notification_service import create_notification
-        sch_name = scholar.scholarship.name if scholar.scholarship else "your scholarship"
-        period = sub.period
         await create_notification(
-            db, int(scholar.student_id),  # type: ignore[arg-type]
+            db, _student_id,
             "GWA Submission Rejected",
-            f"Your grade submission for {period.label} ({sch_name}) was rejected. "
+            f"Your grade submission for {_period_label} ({_sch_name}) was rejected. "
             f"Reason: {data.remarks}. Please resubmit with the correct documents.",
-            int(scholar.application_id) if scholar.application_id else None,  # type: ignore[arg-type]
+            _app_id,
         )
         await db.commit()
     except Exception:
