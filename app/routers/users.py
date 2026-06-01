@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
+import logging
+
 from app.database import get_db
 from app.dependencies import get_current_user, require_osfa_or_admin, require_student
 from app.models.user import User, UserRole, AccountStatus
@@ -15,6 +17,7 @@ import asyncio
 from app.utils.storage import get_signed_url
 from app.exceptions import NotFoundError, ValidationError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
@@ -186,8 +189,8 @@ async def approve_student(
     try:
         from app.utils.email import send_account_verified_email
         await send_account_verified_email(_email)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.error("Failed to send account-verified email to %s (user %s): %s", _email, user_id, exc)
 
     return await _get_student_or_404(db, user_id)
 
@@ -223,8 +226,8 @@ async def reject_student(
     try:
         from app.utils.email import send_account_rejected_email
         await send_account_rejected_email(_email, data.remarks)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.error("Failed to send account-rejected email to %s (user %s): %s", _email, user_id, exc)
 
     return await _get_student_or_404(db, user_id)
 
