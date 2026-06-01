@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.application import Application, ApplicationStatus, WorkflowLog
 from app.models.scholarship import Scholarship, ScholarshipStatus
-from app.models.scholar import Scholar
+from app.models.scholar import Scholar, ScholarStatus
 from app.models.appeal import Appeal, AppealStatus
 from app.models.user import User, UserRole, StudentProfile
 from app.models.workflow import MainStatus, SubStatus
@@ -163,15 +163,21 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
     if existing.scalar_one_or_none():
         raise ConflictError("Already applied to this scholarship")
 
-    # One active application per category (public/private)
+    # One active application per category (public/private).
+    # Terminated or graduated scholars may re-apply — their scholarship has ended.
     if scholarship.category:
         cat_conflict = await db.execute(
             select(Application)
             .join(Scholarship, Application.scholarship_id == Scholarship.id)
+            .outerjoin(Scholar, Scholar.application_id == Application.id)
             .where(
                 Application.student_id == student.id,
                 Application.status.notin_([ApplicationStatus.withdrawn, ApplicationStatus.rejected]),
                 Scholarship.category == scholarship.category,
+                or_(
+                    Scholar.id == None,  # no scholar yet — application still in progress
+                    Scholar.status.notin_([ScholarStatus.terminated, ScholarStatus.graduated]),
+                ),
             )
         )
         if cat_conflict.scalar_one_or_none():
