@@ -441,12 +441,15 @@ async def complete_interview(
     await _apply(db, app, actor, MainStatus.INTERVIEW, SubStatus.INTERVIEW_COMPLETED, notes)
     app.interview_completed_at = _now()
     is_public = app.scholarship and app.scholarship.category and app.scholarship.category.value == "public"
+    # Cache before _commit_and_notify — after commit app.scholarship (relationship) is
+    # expired and accessing it via _sch_name(app) raises MissingGreenlet.
+    _sch_name_cached = _sch_name(app)
     notif = _queue_notification(
         db, app.student_id,
         "Submission Received" if is_public else "Interview Completed",
-        (f"Your submission for {_sch_name(app)} has been received by OSFA. You will be notified once a decision is made."
+        (f"Your submission for {_sch_name_cached} has been received by OSFA. You will be notified once a decision is made."
          if is_public else
-         f"Your interview for {_sch_name(app)} has been completed. You will be notified once a decision is made."),
+         f"Your interview for {_sch_name_cached} has been completed. You will be notified once a decision is made."),
         app.id,
     )
     result = await _commit_and_notify(db, app, notif)
@@ -456,7 +459,7 @@ async def complete_interview(
         from app.utils.email import send_interview_completed_email
         _u = (await db.execute(select(_User).where(_User.id == app.student_id))).scalar_one_or_none()
         if _u:
-            await send_interview_completed_email(str(_u.email), _sch_name(app), bool(is_public))
+            await send_interview_completed_email(str(_u.email), _sch_name_cached, bool(is_public))
     except Exception:
         pass
 

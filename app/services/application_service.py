@@ -521,6 +521,9 @@ async def review_appeal(
     appeal.review_note = data.review_note
     appeal.reviewed_by = staff.id
     appeal.reviewed_at = datetime.now(timezone.utc)
+    # Cache before commit — after commit all ORM attributes are expired and
+    # accessing appeal.student_id raises MissingGreenlet in async context.
+    _appeal_student_id = int(appeal.student_id)  # type: ignore[arg-type]
 
     if data.approved:
         app = await _get_application(db, application_id)
@@ -549,7 +552,7 @@ async def review_appeal(
     _sch_name_appeal: str | None = None
     try:
         from app.models.user import User as _User
-        _u = (await db.execute(select(_User).where(_User.id == appeal.student_id))).scalar_one_or_none()
+        _u = (await db.execute(select(_User).where(_User.id == _appeal_student_id))).scalar_one_or_none()
         _student_email = str(_u.email) if _u else None
         _app_for_name = await db.execute(
             select(Application).where(Application.id == application_id)
@@ -565,7 +568,7 @@ async def review_appeal(
     try:
         if data.approved:
             await create_notification(
-                db, appeal.student_id,
+                db, _appeal_student_id,
                 "Appeal Approved",
                 "Your appeal has been approved. Your application has been reinstated and will be reviewed again.",
                 application_id,
@@ -573,11 +576,12 @@ async def review_appeal(
         else:
             note_text = f" Note: {data.review_note}" if data.review_note else ""
             await create_notification(
-                db, appeal.student_id,
+                db, _appeal_student_id,
                 "Appeal Denied",
                 f"Your appeal was not approved.{note_text} Please contact OSFA for further assistance.",
                 application_id,
             )
+        await db.commit()
     except Exception:
         pass
 
