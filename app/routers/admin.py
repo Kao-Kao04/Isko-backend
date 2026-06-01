@@ -412,6 +412,43 @@ async def broadcast_notification(
     return {"message": f"Notification sent to {len(notifications)} users."}
 
 
+# ── One-time backfill: resend account-verified emails ────────────────────────
+
+@router.post("/backfill/resend-verification-emails", status_code=200)
+async def backfill_verification_emails(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_super_admin),
+):
+    """Send account-verified email to all students who were approved but never
+    received the email (due to a MissingGreenlet bug, now fixed)."""
+    from app.utils.email import send_account_verified_email
+
+    verified_students = (await db.execute(
+        select(User).where(
+            User.role == UserRole.student,
+            User.account_status == AccountStatus.verified,
+            User.is_active == True,
+        )
+    )).scalars().all()
+
+    sent, failed, errors = 0, 0, []
+    for u in verified_students:
+        _email = str(u.email)
+        try:
+            await send_account_verified_email(_email)
+            sent += 1
+        except Exception as exc:
+            failed += 1
+            errors.append({"email": _email, "error": str(exc)})
+
+    return {
+        "total":  len(verified_students),
+        "sent":   sent,
+        "failed": failed,
+        "errors": errors,
+    }
+
+
 # ── Reports export ───────────────────────────────────────────────────────────
 
 @router.get("/reports/export")
