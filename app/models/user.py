@@ -36,6 +36,7 @@ class User(Base):
     account_status = Column(SAEnum(AccountStatus), nullable=False, default=AccountStatus.unregistered)
     rejection_remarks = Column(String, nullable=True)
     department = Column(SAEnum(DepartmentEnum, name="departmentenum", create_constraint=True), nullable=True, default=None)
+    registration_reminded_at = Column(DateTime(timezone=True), nullable=True)  # set once when 24-hr reminder is sent
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

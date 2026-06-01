@@ -77,6 +77,7 @@ async def lifespan(_app: FastAPI):
     asyncio.create_task(_auto_close_loop())
     asyncio.create_task(_reminder_loop())
     asyncio.create_task(_gwa_period_end_loop())
+    asyncio.create_task(_registration_reminder_loop())
     yield
 
 
@@ -196,6 +197,49 @@ async def _gwa_period_end_loop() -> None:
                 await db.commit()
         except Exception as exc:
             logger.warning("GWA period-end notification loop failed: %s", exc)
+
+
+async def _registration_reminder_loop() -> None:
+    """Hourly: send a one-time reminder email to students who registered 24+ hours
+    ago but still haven't submitted their documents (account_status = unregistered)."""
+    from datetime import datetime, timezone, timedelta
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from app.models.user import User, UserRole, AccountStatus
+    from app.utils.email import send_registration_reminder_email
+
+    while True:
+        await asyncio.sleep(3600)  # check every hour
+        try:
+            async with AsyncSessionLocal() as db:
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+                students = (await db.execute(
+                    select(User).where(
+                        User.role == UserRole.student,
+                        User.account_status == AccountStatus.unregistered,
+                        User.is_active == True,
+                        User.created_at <= cutoff,
+                        User.registration_reminded_at == None,  # noqa: E711
+                    )
+                )).scalars().all()
+
+                for u in students:
+                    _email = str(u.email)
+                    _id    = int(u.id)  # type: ignore[arg-type]
+                    try:
+                        await send_registration_reminder_email(_email)
+                        # Mark as reminded so this never fires again for this student
+                        await db.execute(
+                            __import__('sqlalchemy', fromlist=['update']).update(User)
+                            .where(User.id == _id)
+                            .values(registration_reminded_at=datetime.now(timezone.utc))
+                        )
+                        await db.commit()
+                        logger.info("Registration reminder sent to %s", _email)
+                    except Exception as exc:
+                        logger.error("Registration reminder failed for %s: %s", _email, exc)
+        except Exception as exc:
+            logger.warning("Registration reminder loop failed: %s", exc)
 
 
 app.state.limiter = limiter
