@@ -166,12 +166,16 @@ async def approve_student(
         raise ValidationError("Only students with pending or rejected status can be approved")
     user.account_status = AccountStatus.verified
     user.rejection_remarks = None
+    # Cache before commit — after commit all ORM attributes expire and accessing
+    # them in async context raises MissingGreenlet (caught silently, email never sent).
+    _user_id = int(user.id)           # type: ignore[arg-type]
+    _email   = str(user.email)
     await db.commit()
 
     try:
         from app.services.notification_service import create_notification
         await create_notification(
-            db, user.id,
+            db, _user_id,
             "Account Verified",
             "Your IskoMo account has been verified by OSFA. You can now apply for scholarships!",
         )
@@ -181,7 +185,7 @@ async def approve_student(
 
     try:
         from app.utils.email import send_account_verified_email
-        await send_account_verified_email(user.email)
+        await send_account_verified_email(_email)
     except Exception:
         pass
 
@@ -200,13 +204,15 @@ async def reject_student(
         raise ValidationError("Only students with pending_verification status can be rejected")
     user.account_status = AccountStatus.rejected
     user.rejection_remarks = data.remarks
+    _user_id = int(user.id)   # type: ignore[arg-type]
+    _email   = str(user.email)
     await db.commit()
 
     try:
         from app.services.notification_service import create_notification
         reason_text = f" Reason: {data.remarks}" if data.remarks else " Please contact OSFA for more information."
         await create_notification(
-            db, user.id,
+            db, _user_id,
             "Account Verification Rejected",
             f"Your IskoMo account verification was not approved.{reason_text}",
         )
@@ -216,7 +222,7 @@ async def reject_student(
 
     try:
         from app.utils.email import send_account_rejected_email
-        await send_account_rejected_email(user.email, data.remarks)
+        await send_account_rejected_email(_email, data.remarks)
     except Exception:
         pass
 
