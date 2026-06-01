@@ -185,6 +185,7 @@ async def verify_compliance_doc(
                 f"Your document '{_req_type}' has been verified by OSFA.",
                 application_id,
             )
+            await db.commit()
         except Exception:
             pass
 

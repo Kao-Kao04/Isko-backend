@@ -119,8 +119,9 @@ async def osfa_mark_read(
     if not inquiry:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Inquiry not found"})
     inquiry.is_read = True
+    response = _fmt(inquiry)  # build before commit — in-memory values are current
     await db.commit()
-    return _fmt(inquiry)
+    return response
 
 
 @router.post("/api/osfa/contacts/{contact_id}/reply", status_code=200)
@@ -137,28 +138,38 @@ async def osfa_reply(
     inquiry.osfa_reply = data.reply.strip()
     inquiry.replied_at = datetime.now(timezone.utc)
     inquiry.is_read = True
+
+    # Cache scalar values before commit — after commit all ORM attributes expire
+    # and accessing them in async context raises MissingGreenlet.
+    _student_user_id = int(inquiry.student_user_id) if inquiry.student_user_id else None  # type: ignore[arg-type]
+    _subject         = inquiry.subject or None
+    _name            = str(inquiry.name)
+    _email           = str(inquiry.email)
+    response = _fmt(inquiry)  # build before commit
+
     await db.commit()
 
     # In-app notification to student (works even if email fails)
-    if inquiry.student_user_id:
+    if _student_user_id:
         try:
             from app.services.notification_service import create_notification
-            subject_preview = inquiry.subject or "your inquiry"
+            subject_preview = _subject or "your inquiry"
             await create_notification(
-                db, inquiry.student_user_id,
+                db, _student_user_id,
                 "OSFA Replied to Your Inquiry",
                 f"OSFA has responded to your message: \"{subject_preview}\". Check the Contact OSFA page to view the reply.",
             )
+            await db.commit()
         except Exception:
             pass
 
     # Email reply to student
     from app.utils.email import _send
-    safe_inquiry_name = _html.escape(str(inquiry.name))
+    safe_inquiry_name = _html.escape(str(_name))
     safe_reply = _html.escape(data.reply.strip()).replace("\n", "<br>")
     asyncio.create_task(_send(
-        inquiry.email,
-        f"Re: {inquiry.subject or 'Your inquiry to IskoMo OSFA'}",
+        _email,
+        f"Re: {_subject or 'Your inquiry to IskoMo OSFA'}",
         f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
         <h2 style="color:#800000;">Response from OSFA</h2>
         <p style="font-size:14px;color:#374151;">Hi {safe_inquiry_name},</p>
@@ -169,7 +180,7 @@ async def osfa_reply(
         </div>"""
     ))
 
-    return _fmt(inquiry)
+    return response
 
 
 # ── Student: view own contact inquiries and OSFA replies ──────────────────────
@@ -214,5 +225,6 @@ async def mark_contact_read(
     if not inquiry:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Inquiry not found"})
     inquiry.is_read = True
+    response = _fmt(inquiry)  # build before commit — in-memory values are current
     await db.commit()
-    return _fmt(inquiry)
+    return response
