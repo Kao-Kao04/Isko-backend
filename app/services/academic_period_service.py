@@ -4,10 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.models.academic_period import AcademicPeriod, GwaSubmission, GwaSubmissionStatus
-from app.models.scholar import Scholar, SemesterRecord
+from app.models.scholar import Scholar, SemesterRecord, ScholarStatus, _TERMINAL
+from app.models.scholarship import Scholarship
 from app.models.user import User, UserRole
 from app.schemas.academic_period import AcademicPeriodCreate, GwaSubmissionReview, GwaSubmissionReject
 from app.exceptions import NotFoundError, ValidationError, ForbiddenError
+from app.utils.storage import delete_file
 
 
 # ── Academic Period management (super admin) ──────────────────────────────────
@@ -33,7 +35,34 @@ async def create_period(db: AsyncSession, data: AcademicPeriodCreate, actor: Use
     db.add(period)
     await db.commit()
     await db.refresh(period)
-    return period
+
+    # Cache scalar values before any further commits — after commit all ORM attributes expire.
+    _period_id = int(period.id)                              # type: ignore[arg-type]
+    _label     = period.label
+    _end_date  = period.end_date.strftime("%B %d, %Y")
+    try:
+        from app.services.notification_service import create_notification
+        scholars = (await db.execute(
+            select(Scholar)
+            .options(selectinload(Scholar.scholarship))
+            .where(Scholar.status.in_([ScholarStatus.active, ScholarStatus.probationary]))
+        )).scalars().all()
+        for s in scholars:
+            _sch = str(s.scholarship.name) if s.scholarship else "your scholarship"
+            _app = int(s.application_id) if s.application_id else None  # type: ignore[arg-type]
+            await create_notification(
+                db, int(s.student_id),  # type: ignore[arg-type]
+                f"New Semester Period: {_label}",
+                f"OSFA has set up the {_label} semester. You can submit your GWA and grade slip for {_sch} once the semester ends on {_end_date}.",
+                _app,
+            )
+        await db.commit()
+    except Exception:
+        pass
+
+    # Re-fetch so the returned object is fresh after the notification commit.
+    result = await db.execute(select(AcademicPeriod).where(AcademicPeriod.id == _period_id))
+    return result.scalar_one()
 
 
 async def delete_period(db: AsyncSession, period_id: int, actor: User) -> None:
@@ -78,6 +107,9 @@ async def submit_gwa(
 ) -> GwaSubmission:
     scholar = await _get_scholar_for_student(db, scholar_id, student.id)
 
+    if scholar.status in _TERMINAL:
+        raise ValidationError("Terminated or graduated scholars cannot submit grades.")
+
     result = await db.execute(select(AcademicPeriod).where(AcademicPeriod.id == period_id))
     period = result.scalar_one_or_none()
     if not period:
@@ -116,7 +148,6 @@ async def submit_gwa(
                 "Please wait for OSFA to review it."
             )
         # Rejected — allow resubmit: update in place
-        from app.utils.storage import delete_file
         await delete_file(sub.proof_path)
         sub.declared_gwa = declared_gwa
         sub.has_grade_below_2_5 = has_grade_below_2_5
@@ -126,9 +157,12 @@ async def submit_gwa(
         sub.submitted_at = datetime.now(timezone.utc)
         sub.reviewed_at = None
         sub.reviewed_by_id = None
+        _sub_id = int(sub.id)  # type: ignore[arg-type]
         await db.commit()
-        await db.refresh(sub)
-        return sub
+        result = await db.execute(
+            select(GwaSubmission).options(selectinload(GwaSubmission.period)).where(GwaSubmission.id == _sub_id)
+        )
+        return result.scalar_one()
 
     sub = GwaSubmission(
         scholar_id=scholar_id,
@@ -138,9 +172,13 @@ async def submit_gwa(
         proof_path=proof_path,
     )
     db.add(sub)
+    await db.flush()
+    _sub_id = int(sub.id)  # type: ignore[arg-type]
     await db.commit()
-    await db.refresh(sub)
-    return sub
+    result = await db.execute(
+        select(GwaSubmission).options(selectinload(GwaSubmission.period)).where(GwaSubmission.id == _sub_id)
+    )
+    return result.scalar_one()
 
 
 async def list_gwa_submissions(
@@ -165,7 +203,6 @@ async def list_gwa_submissions(
 
 async def list_pending_gwa_submissions(db: AsyncSession, actor: User) -> list[GwaSubmission]:
     """All pending submissions — optionally filtered by OSFA staff dept."""
-    from app.models.scholarship import Scholarship
     q = (
         select(GwaSubmission)
         .options(
@@ -265,20 +302,20 @@ async def approve_gwa_submission(
         )
         db.add(record)
         await db.flush()
-        # Auto-evaluate scholar status based on new GWA
-        from app.services.scholar_service import _evaluate_retention
-        await _evaluate_retention(db, scholar, confirmed_gwa, has_below)
+
+    from app.services.scholar_service import _evaluate_retention
+    await _evaluate_retention(db, scholar, confirmed_gwa, has_below)
 
     # Cache ORM attribute values before commit — after commit all objects are expired
     # and accessing them in async context raises MissingGreenlet.
-    _student_id   = int(scholar.student_id)        # type: ignore[arg-type]
+    _sub_id       = int(sub.id)                     # type: ignore[arg-type]
+    _student_id   = int(scholar.student_id)          # type: ignore[arg-type]
     _app_id       = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
     _sch_name     = str(scholar.scholarship.name) if scholar.scholarship else "your scholarship"
     _period_label = period.label
     _gwa_part     = f" Confirmed GWA: {confirmed_gwa}." if confirmed_gwa else ""
 
     await db.commit()
-    await db.refresh(sub)
 
     try:
         from app.services.notification_service import create_notification
@@ -292,7 +329,12 @@ async def approve_gwa_submission(
     except Exception:
         pass
 
-    return sub
+    # Re-fetch with period eagerly loaded — after commits all ORM attributes are expired
+    # and accessing sub.period in the router would raise MissingGreenlet.
+    result = await db.execute(
+        select(GwaSubmission).options(selectinload(GwaSubmission.period)).where(GwaSubmission.id == _sub_id)
+    )
+    return result.scalar_one()
 
 
 async def reject_gwa_submission(
@@ -317,7 +359,8 @@ async def reject_gwa_submission(
 
     # Cache ORM attribute values before commit — after commit all objects are expired
     # and accessing them in async context raises MissingGreenlet.
-    _student_id   = int(scholar.student_id)        # type: ignore[arg-type]
+    _sub_id       = int(sub.id)                     # type: ignore[arg-type]
+    _student_id   = int(scholar.student_id)          # type: ignore[arg-type]
     _app_id       = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
     _sch_name     = str(scholar.scholarship.name) if scholar.scholarship else "your scholarship"
     _period_label = sub.period.label
@@ -327,7 +370,6 @@ async def reject_gwa_submission(
     sub.reviewed_at = datetime.now(timezone.utc)
     sub.reviewed_by_id = actor.id
     await db.commit()
-    await db.refresh(sub)
 
     try:
         from app.services.notification_service import create_notification
@@ -342,4 +384,9 @@ async def reject_gwa_submission(
     except Exception:
         pass
 
-    return sub
+    # Re-fetch with period eagerly loaded — after commits all ORM attributes are expired
+    # and accessing sub.period in the router would raise MissingGreenlet.
+    result = await db.execute(
+        select(GwaSubmission).options(selectinload(GwaSubmission.period)).where(GwaSubmission.id == _sub_id)
+    )
+    return result.scalar_one()

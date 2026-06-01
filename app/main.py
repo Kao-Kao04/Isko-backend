@@ -1,6 +1,9 @@
 import logging
 import logging.config
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -61,17 +64,8 @@ _docs_url    = None if _is_prod else "/docs"
 _redoc_url   = None if _is_prod else "/redoc"
 _openapi_url = None if _is_prod else "/openapi.json"
 
-app = FastAPI(
-    title="IskoMo API",
-    version="1.0.0",
-    docs_url=_docs_url,
-    redoc_url=_redoc_url,
-    openapi_url=_openapi_url,
-)
-
-
-@app.on_event("startup")
-async def _warm_token_blacklist() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     from app.database import AsyncSessionLocal
     from app.token_blacklist import load_from_db
     try:
@@ -80,10 +74,24 @@ async def _warm_token_blacklist() -> None:
     except Exception as exc:
         logger.warning("Could not load revoked tokens on startup: %s", exc)
 
+    asyncio.create_task(_auto_close_loop())
+    asyncio.create_task(_reminder_loop())
+    asyncio.create_task(_gwa_period_end_loop())
+    yield
+
+
+app = FastAPI(
+    title="IskoMo API",
+    version="1.0.0",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
+    lifespan=lifespan,
+)
+
 
 async def _auto_close_loop() -> None:
     """Background task: close expired/full scholarships every hour."""
-    import asyncio
     from app.database import AsyncSessionLocal
     from app.services.scholarship_service import _auto_close_expired
     while True:
@@ -97,7 +105,6 @@ async def _auto_close_loop() -> None:
 
 async def _reminder_loop() -> None:
     """Background task: send pending-action reminders to students every 24 hours."""
-    import asyncio
     from datetime import datetime, timezone, timedelta
     from app.database import AsyncSessionLocal
     from sqlalchemy import select
@@ -147,11 +154,48 @@ async def _reminder_loop() -> None:
             logger.warning("Reminder loop failed: %s", exc)
 
 
-@app.on_event("startup")
-async def _start_background_tasks() -> None:
-    import asyncio
-    asyncio.create_task(_auto_close_loop())
-    asyncio.create_task(_reminder_loop())
+async def _gwa_period_end_loop() -> None:
+    """Daily: notify active scholars when a semester period has just ended so they can submit GWA."""
+    from datetime import date, timedelta
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.academic_period import AcademicPeriod
+    from app.models.scholar import Scholar, ScholarStatus
+    from app.services.notification_service import create_notification
+
+    while True:
+        await asyncio.sleep(86400)  # run once per day
+        try:
+            async with AsyncSessionLocal() as db:
+                yesterday = date.today() - timedelta(days=1)
+                periods = (await db.execute(
+                    select(AcademicPeriod).where(AcademicPeriod.end_date == yesterday)
+                )).scalars().all()
+
+                for period in periods:
+                    _label = period.label
+                    scholars = (await db.execute(
+                        select(Scholar)
+                        .options(selectinload(Scholar.scholarship))
+                        .where(Scholar.status.in_([ScholarStatus.active, ScholarStatus.probationary]))
+                    )).scalars().all()
+
+                    for s in scholars:
+                        try:
+                            _sch = str(s.scholarship.name) if s.scholarship else "your scholarship"
+                            _app = int(s.application_id) if s.application_id else None  # type: ignore[arg-type]
+                            await create_notification(
+                                db, int(s.student_id),  # type: ignore[arg-type]
+                                f"Submit Your Grades: {_label} Has Ended",
+                                f"The {_label} semester has ended. You can now upload your grade slip and submit your GWA for {_sch} on IskoMo.",
+                                _app,
+                            )
+                        except Exception:
+                            pass
+                await db.commit()
+        except Exception as exc:
+            logger.warning("GWA period-end notification loop failed: %s", exc)
 
 
 app.state.limiter = limiter

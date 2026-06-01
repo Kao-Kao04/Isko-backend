@@ -338,6 +338,7 @@ async def approve_gwa_request(
         raise ValidationError("No pending GWA request for this student")
 
     old_proof = p.gwa_proof_path
+    _new_gwa = p.pending_gwa  # cache before commit expires ORM attrs
     p.gwa                   = p.pending_gwa
     p.pending_gwa           = None
     p.gwa_request_status    = "approved"
@@ -356,12 +357,13 @@ async def approve_gwa_request(
     try:
         from app.services.notification_service import create_notification
         await create_notification(db, user.id, "GWA Update Approved",  # type: ignore[arg-type]
-            f"Your GWA update to {p.gwa} has been verified and approved by OSFA.",
+            f"Your GWA update to {_new_gwa} has been verified and approved by OSFA.",
             link="/profile")
+        await db.commit()
     except Exception:
         pass
 
-    return {"status": "approved", "gwa": p.gwa}
+    return {"status": "approved", "gwa": _new_gwa}
 
 
 @router.patch("/{user_id}/gwa-request/reject", status_code=200)
@@ -395,6 +397,7 @@ async def reject_gwa_request(
         await create_notification(db, user.id, "GWA Update Rejected",  # type: ignore[arg-type]
             f"Your GWA update request was not approved by OSFA.{reason}",
             link="/profile")
+        await db.commit()
     except Exception:
         pass
 
