@@ -204,7 +204,7 @@ async def _registration_reminder_loop() -> None:
     ago but still haven't submitted their documents (account_status = unregistered)."""
     from datetime import datetime, timezone, timedelta
     from app.database import AsyncSessionLocal
-    from sqlalchemy import select
+    from sqlalchemy import select, update
     from app.models.user import User, UserRole, AccountStatus
     from app.utils.email import send_registration_reminder_email
 
@@ -223,15 +223,20 @@ async def _registration_reminder_loop() -> None:
                     )
                 )).scalars().all()
 
-                for u in students:
-                    _email = str(u.email)
-                    _id    = int(u.id)  # type: ignore[arg-type]
+                # Cache all (id, email) pairs BEFORE any commit — after each
+                # commit all ORM attributes expire, accessing u.email in the
+                # next iteration would raise MissingGreenlet.
+                student_data = [
+                    (int(u.id), str(u.email))  # type: ignore[arg-type]
+                    for u in students
+                ]
+
+                for _id, _email in student_data:
                     try:
                         await send_registration_reminder_email(_email)
                         # Mark as reminded so this never fires again for this student
                         await db.execute(
-                            __import__('sqlalchemy', fromlist=['update']).update(User)
-                            .where(User.id == _id)
+                            update(User).where(User.id == _id)
                             .values(registration_reminded_at=datetime.now(timezone.utc))
                         )
                         await db.commit()
