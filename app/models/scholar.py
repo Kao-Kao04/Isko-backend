@@ -19,21 +19,24 @@ class ScholarStatus(str, enum.Enum):
 _TERMINAL = {ScholarStatus.terminated, ScholarStatus.graduated}
 
 SCHOLAR_STATUS_TRANSITIONS: dict[ScholarStatus, list[ScholarStatus]] = {
+    # on_leave removed as a target — OSFA no longer sets this via status update;
+    # existing on_leave scholars can still transition out normally.
     ScholarStatus.active: [
         ScholarStatus.probationary, ScholarStatus.under_review,
-        ScholarStatus.on_leave, ScholarStatus.terminated, ScholarStatus.graduated,
+        ScholarStatus.terminated, ScholarStatus.graduated,
     ],
     ScholarStatus.probationary: [
         ScholarStatus.active, ScholarStatus.under_review,
-        ScholarStatus.on_leave, ScholarStatus.terminated, ScholarStatus.graduated,
+        ScholarStatus.terminated, ScholarStatus.graduated,
     ],
     ScholarStatus.under_review: [
         ScholarStatus.active, ScholarStatus.probationary,
-        ScholarStatus.on_leave, ScholarStatus.terminated,
+        ScholarStatus.terminated,
     ],
     ScholarStatus.on_leave: [ScholarStatus.active, ScholarStatus.terminated],
     ScholarStatus.suspended: [ScholarStatus.active, ScholarStatus.terminated],
-    ScholarStatus.terminated: [],
+    # under_review added — lets OSFA re-open review after a student appeal.
+    ScholarStatus.terminated: [ScholarStatus.under_review],
     ScholarStatus.graduated: [],
 }
 
