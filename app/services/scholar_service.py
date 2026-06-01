@@ -274,8 +274,9 @@ async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterR
     _student_id     = int(scholar.student_id)      # type: ignore[arg-type]
     _application_id = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
     _scholarship_id = int(scholar.scholarship_id)  # type: ignore[arg-type]
+    await db.flush()
+    _record_id = int(record.id)  # type: ignore[arg-type]
     await db.commit()
-    await db.refresh(record)
     try:
         from app.services.notification_service import create_notification
         from app.models.scholarship import Scholarship as _Sch
@@ -291,7 +292,8 @@ async def add_semester_record(db: AsyncSession, scholar_id: int, data: SemesterR
         await db.commit()
     except Exception:
         pass
-    return record
+    result = await db.execute(select(SemesterRecord).where(SemesterRecord.id == _record_id))
+    return result.scalar_one()
 
 
 async def update_semester_record(
@@ -316,25 +318,32 @@ async def update_semester_record(
             record.gwa,
             record.has_grade_below_2_5,
         )
+    # Cache notification data before commit — attributes expire after commit.
+    scholar2 = await get_scholar(db, scholar_id)
+    _student_id2    = int(scholar2.student_id)   # type: ignore[arg-type]
+    _application_id2 = int(scholar2.application_id) if scholar2.application_id else None  # type: ignore[arg-type]
+    _scholarship_id2 = int(scholar2.scholarship_id)  # type: ignore[arg-type]
+    _sem            = str(record.semester)
+    _ay             = str(record.academic_year)
+    _gwa            = str(record.gwa) if record.gwa else None
     await db.commit()
-    await db.refresh(record)
     try:
         from app.services.notification_service import create_notification
         from app.models.scholarship import Scholarship as _Sch
-        scholar2 = await get_scholar(db, scholar_id)
-        _sch = (await db.execute(select(_Sch).where(_Sch.id == scholar2.scholarship_id))).scalar_one_or_none()
+        _sch = (await db.execute(select(_Sch).where(_Sch.id == _scholarship_id2))).scalar_one_or_none()
         _sch_name = str(_sch.name) if _sch else "your scholarship"
-        gwa_part = f" GWA: {record.gwa}." if record.gwa else ""
+        gwa_part = f" GWA: {_gwa}." if _gwa else ""
         await create_notification(
-            db, int(scholar2.student_id),  # type: ignore[arg-type]
+            db, _student_id2,
             "Semester Record Updated",
-            f"OSFA has updated your grades for {record.semester} {record.academic_year} ({_sch_name}).{gwa_part}",
-            int(scholar2.application_id) if scholar2.application_id else None,  # type: ignore[arg-type]
+            f"OSFA has updated your grades for {_sem} {_ay} ({_sch_name}).{gwa_part}",
+            _application_id2,
         )
         await db.commit()
     except Exception:
         pass
-    return record
+    result2 = await db.execute(select(SemesterRecord).where(SemesterRecord.id == record_id))
+    return result2.scalar_one()
 
 
 async def _get_semester_record(db: AsyncSession, scholar_id: int, record_id: int) -> SemesterRecord:
@@ -362,32 +371,41 @@ async def release_benefit(db: AsyncSession, scholar_id: int, record_id: int, act
     record = await _get_semester_record(db, scholar_id, record_id)
     if record.benefit_released:
         raise ValidationError("Benefit has already been released for this semester record.")
+
+    # Cache scalar values before commit — after commit all ORM attributes expire.
+    _record_id     = int(record.id)          # type: ignore[arg-type]
+    _student_id    = int(scholar.student_id)  # type: ignore[arg-type]
+    _application_id = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
+    _scholarship_id = int(scholar.scholarship_id)  # type: ignore[arg-type]
+
     record.benefit_released = True
     record.benefit_released_at = datetime.now(timezone.utc)
     await db.commit()
-    await db.refresh(record)
 
     try:
         from app.models.scholarship import Scholarship as _Sch
-        _sch = (await db.execute(select(_Sch).where(_Sch.id == scholar.scholarship_id))).scalar_one_or_none()
+        _sch = (await db.execute(select(_Sch).where(_Sch.id == _scholarship_id))).scalar_one_or_none()
         _sch_name = str(_sch.name) if _sch else "your scholarship"
-        _u = (await db.execute(select(User).where(User.id == scholar.student_id))).scalar_one_or_none()
+        _u = (await db.execute(select(User).where(User.id == _student_id))).scalar_one_or_none()
+        _u_email = str(_u.email) if _u else None  # cache before second commit expires _u
 
         from app.services.notification_service import create_notification
         await create_notification(
-            db, scholar.student_id,
+            db, _student_id,
             "Scholarship Benefit Released",
             f"Your scholarship benefit/allowance for {_sch_name} has been released by OSFA. Please check with your scholarship office for details.",
-            scholar.application_id,
+            _application_id,
         )
+        await db.commit()
 
-        if _u:
+        if _u_email:
             from app.utils.email import send_benefit_released_email
-            await send_benefit_released_email(str(_u.email), _sch_name)
+            await send_benefit_released_email(_u_email, _sch_name)
     except Exception:
         pass
 
-    return record
+    result = await db.execute(select(SemesterRecord).where(SemesterRecord.id == _record_id))
+    return result.scalar_one()
 
 
 async def submit_thank_you(db: AsyncSession, scholar_id: int, record_id: int, actor: User) -> SemesterRecord:
@@ -409,21 +427,27 @@ async def submit_thank_you(db: AsyncSession, scholar_id: int, record_id: int, ac
     if sch and not sch.requires_thank_you_letter:
         raise ValidationError("This scholarship does not require a thank you letter.")
 
+    # Cache scalar values before commit — after commit all ORM attributes expire.
+    _record_id      = int(record.id)           # type: ignore[arg-type]
+    _student_id     = int(scholar.student_id)   # type: ignore[arg-type]
+    _application_id = int(scholar.application_id) if scholar.application_id else None  # type: ignore[arg-type]
+    _sch_name       = str(sch.name) if sch else "your scholarship"
+
     record.thank_you_submitted = True
     record.thank_you_submitted_at = datetime.now(timezone.utc)
     await db.commit()
-    await db.refresh(record)
 
     try:
-        sch_name = str(sch.name) if sch else "your scholarship"
         from app.services.notification_service import create_notification
         await create_notification(
-            db, int(scholar.student_id),  # type: ignore[arg-type]
+            db, _student_id,
             "Thank You Letter Confirmed",
-            f"OSFA has confirmed receipt of your thank you letter for {sch_name}. Thank you for your gratitude!",
-            int(scholar.application_id),  # type: ignore[arg-type]
+            f"OSFA has confirmed receipt of your thank you letter for {_sch_name}. Thank you for your gratitude!",
+            _application_id,
         )
+        await db.commit()
     except Exception:
         pass
 
-    return record
+    result = await db.execute(select(SemesterRecord).where(SemesterRecord.id == _record_id))
+    return result.scalar_one()

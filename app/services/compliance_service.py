@@ -168,17 +168,21 @@ async def verify_compliance_doc(
                 app.main_status = MainStatus.COMPLETION
                 app.sub_status = SubStatus.REQUIREMENTS_SUBMITTED
 
+    # Cache before commit — after commit app attributes are expired
+    _student_id = int(app.student_id) if app else None  # type: ignore[arg-type]
+    _req_type   = str(doc.requirement_type)
+
     await db.commit()
     await db.refresh(doc)
 
     # Notify student that their document was verified
-    if app:
+    if _student_id:
         try:
             from app.services.notification_service import create_notification
             await create_notification(
-                db, app.student_id,
+                db, _student_id,
                 "Compliance Document Verified",
-                f"Your document '{doc.requirement_type}' has been verified by OSFA.",
+                f"Your document '{_req_type}' has been verified by OSFA.",
                 application_id,
             )
         except Exception:

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from datetime import datetime
 from typing import List
 from app.models.scholar import ScholarStatus
@@ -77,7 +77,16 @@ class ScholarResponse(BaseModel):
     last_release_date: datetime | None
     next_release_date: datetime | None
     created_at: datetime
+    max_semesters: int | None = None
     semester_records: List[SemesterRecordResponse] = []
     status_logs: List[ScholarStatusLogResponse] = []
+
+    @computed_field
+    @property
+    def semesters_used(self) -> int:
+        return sum(
+            1 for r in self.semester_records
+            if r.semester in ("1st Semester", "2nd Semester")
+        )
 
     model_config = {"from_attributes": True}

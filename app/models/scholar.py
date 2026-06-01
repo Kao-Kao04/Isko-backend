@@ -25,7 +25,7 @@ SCHOLAR_STATUS_TRANSITIONS: dict[ScholarStatus, list[ScholarStatus]] = {
     ],
     ScholarStatus.probationary: [
         ScholarStatus.active, ScholarStatus.under_review,
-        ScholarStatus.on_leave, ScholarStatus.terminated,
+        ScholarStatus.on_leave, ScholarStatus.terminated, ScholarStatus.graduated,
     ],
     ScholarStatus.under_review: [
         ScholarStatus.active, ScholarStatus.probationary,
@@ -48,6 +48,7 @@ class Scholar(Base):
     status = Column(SAEnum(ScholarStatus), nullable=False, default=ScholarStatus.active)
     is_graduating = Column(Boolean, default=False)
     expected_graduation = Column(String)
+    max_semesters = Column(Integer, nullable=True)
     # Allowance tracking
     allowance_status   = Column(String, nullable=False, default="pending")  # pending | partial | released
     amount_released    = Column(Integer, nullable=True)

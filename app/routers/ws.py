@@ -46,4 +46,4 @@ async def notifications_ws(websocket: WebSocket, token: str = Query(...)):
             # Keep connection alive — client can send pings
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        manager.disconnect(user_id, websocket)
