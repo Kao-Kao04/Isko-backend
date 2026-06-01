@@ -284,14 +284,16 @@ async def toggle_student_active(
     if not user:
         from app.exceptions import NotFoundError
         raise NotFoundError("Student", student_id)
-    user.is_active = not user.is_active
+    _was_active = bool(user.is_active)   # cache before commit — attrs expire after commit
+    user.is_active = not _was_active  # type: ignore[assignment]
     await db.commit()
-    action = "reactivate_student" if user.is_active else "deactivate_student"
+    _now_active = not _was_active
+    action = "reactivate_student" if _now_active else "deactivate_student"
     await log_system_audit(db, actor.id, "user", action, entity_id=student_id,
-                           before_state={"is_active": not user.is_active},
-                           after_state={"is_active": user.is_active})
-    return {"id": user.id, "is_active": user.is_active,
-            "message": f"Account {'reactivated' if user.is_active else 'deactivated'} successfully."}
+                           before_state={"is_active": _was_active},
+                           after_state={"is_active": _now_active})
+    return {"id": student_id, "is_active": _now_active,
+            "message": f"Account {'reactivated' if _now_active else 'deactivated'} successfully."}
 
 
 @router.delete("/students/{student_id}", status_code=204)
