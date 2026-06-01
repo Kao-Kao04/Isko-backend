@@ -140,7 +140,7 @@ async def send_message(
                 title="New reply from OSFA",
                 body=f"OSFA replied to your message on application #{application_id}.",
                 application_id=application_id,
-                link=f"/applications/{application_id}",
+                link=f"/messages/{application_id}",
             )
         except Exception:
             pass
