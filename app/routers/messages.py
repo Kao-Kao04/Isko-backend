@@ -61,13 +61,15 @@ async def list_messages(
         if app.scholarship.category != current_user.department:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your department's application"})
 
-    # Mark messages from the other party as read
+    # Build response before commit — after commit ORM objects are expired and
+    # accessing app.messages / m.sender raises MissingGreenlet in async context.
+    items = [_fmt(m) for m in app.messages]
     for m in app.messages:
         if not m.is_read and m.sender_id != current_user.id:
             m.is_read = True
     await db.commit()
 
-    return {"items": [_fmt(m) for m in app.messages]}
+    return {"items": items}
 
 
 @router.post("/{application_id}/messages", status_code=201)
@@ -98,6 +100,8 @@ async def send_message(
     db.add(msg)
     await db.flush()
     await db.refresh(msg, ["sender"])
+    # Build response before the final commit — after commit msg/sender are expired.
+    response = _fmt(msg)
 
     # Notify the other party
     if current_user.role == UserRole.student:
@@ -142,7 +146,7 @@ async def send_message(
             pass
 
     await db.commit()
-    return _fmt(msg)
+    return response
 
 
 # ── Inbox ─────────────────────────────────────────────────────────────────────

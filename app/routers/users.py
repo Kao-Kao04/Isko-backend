@@ -175,6 +175,7 @@ async def approve_student(
             "Account Verified",
             "Your IskoMo account has been verified by OSFA. You can now apply for scholarships!",
         )
+        await db.commit()
     except Exception:
         pass
 
@@ -209,6 +210,7 @@ async def reject_student(
             "Account Verification Rejected",
             f"Your IskoMo account verification was not approved.{reason_text}",
         )
+        await db.commit()
     except Exception:
         pass
 
@@ -299,6 +301,7 @@ async def submit_gwa_request(
         await delete_file(str(p.gwa_proof_path))
 
     path = await upload_file(file_bytes, proof.filename or "proof", content_type)
+    _student_name = f"{p.first_name} {p.last_name}".strip()  # cache before commit
     p.pending_gwa           = gwa.strip()
     p.gwa_proof_path        = path
     p.gwa_request_status    = "pending"
@@ -313,11 +316,11 @@ async def submit_gwa_request(
         )
         osfa_users = osfa_result.scalars().all()
         from app.services.notification_service import create_notification
-        name = f"{p.first_name} {p.last_name}".strip()
         for staff in osfa_users:
             await create_notification(db, staff.id, "GWA Update Request",  # type: ignore[arg-type]
-                f"{name} submitted a GWA update request (GWA: {gwa.strip()}).",
+                f"{_student_name} submitted a GWA update request (GWA: {gwa.strip()}).",
                 link="/registrations")
+        await db.commit()
     except Exception:
         pass
 
