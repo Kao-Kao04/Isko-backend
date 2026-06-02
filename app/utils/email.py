@@ -18,28 +18,39 @@ def _send_via_smtp(to_email: str, subject: str, html: str) -> None:
     msg["To"]      = to_email
     msg.attach(MIMEText(html, "html"))
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(settings.SMTP_USER, settings.SMTP_PASS)
-        server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+    try:
+        # Primary: STARTTLS on port 587
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASS)
+            server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+    except Exception:
+        # Fallback: SSL on port 465 (some cloud providers block 587 but allow 465)
+        import ssl as _ssl
+        context = _ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context) as server:
+            server.login(settings.SMTP_USER, settings.SMTP_PASS)
+            server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
 
 
 async def _send(to_email: str, subject: str, html: str) -> None:
-    # Prefer Gmail SMTP if configured
+    # Try Gmail SMTP first
     if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASS:
         try:
             await asyncio.to_thread(_send_via_smtp, to_email, subject, html)
             logger.info("Email sent via SMTP to %s — %s", to_email, subject)
             return
         except Exception as exc:
-            logger.error("SMTP send failed for %s: %s", to_email, exc)
-            raise RuntimeError("Could not send email. Please try again later.") from exc
+            # Log and fall through to Resend — don't raise yet.
+            # Cloud providers (Railway) can be blocked by Gmail SMTP;
+            # Resend is the reliable fallback.
+            logger.warning("SMTP failed for %s (%s) — falling back to Resend", to_email, exc)
 
-    # Fallback to Resend
+    # Fallback: Resend API
     if not settings.RESEND_API_KEY:
-        logger.warning("No email provider configured — email to %s skipped. Subject: %s", to_email, subject)
-        return
+        logger.error("No working email provider — email to %s dropped. Subject: %s", to_email, subject)
+        raise RuntimeError("Could not send email. Please try again later.")
 
     resend.api_key = settings.RESEND_API_KEY
     try:
@@ -49,8 +60,9 @@ async def _send(to_email: str, subject: str, html: str) -> None:
             "subject": subject,
             "html": html,
         })
+        logger.info("Email sent via Resend to %s — %s", to_email, subject)
     except Exception as exc:
-        logger.error("Failed to send email to %s: %s", to_email, exc)
+        logger.error("Resend also failed for %s: %s", to_email, exc)
         raise RuntimeError("Could not send email. Please try again later.") from exc
 
 
