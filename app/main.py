@@ -78,6 +78,7 @@ async def lifespan(_app: FastAPI):
     asyncio.create_task(_reminder_loop())
     asyncio.create_task(_gwa_period_end_loop())
     asyncio.create_task(_registration_reminder_loop())
+    asyncio.create_task(_db_keepalive_loop())
     yield
 
 
@@ -245,6 +246,20 @@ async def _registration_reminder_loop() -> None:
                         logger.error("Registration reminder failed for %s: %s", _email, exc)
         except Exception as exc:
             logger.warning("Registration reminder loop failed: %s", exc)
+
+
+async def _db_keepalive_loop() -> None:
+    """Ping the DB every 5 minutes to prevent Supabase idle cold-start delays
+    that cause the first user request after inactivity to take 2+ seconds."""
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import text
+    while True:
+        await asyncio.sleep(300)  # every 5 minutes
+        try:
+            async with AsyncSessionLocal() as db:
+                await db.execute(text("SELECT 1"))
+        except Exception as exc:
+            logger.warning("DB keepalive ping failed: %s", exc)
 
 
 app.state.limiter = limiter
