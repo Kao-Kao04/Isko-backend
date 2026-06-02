@@ -4,8 +4,6 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-import resend
-
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -35,35 +33,17 @@ def _send_via_smtp(to_email: str, subject: str, html: str) -> None:
 
 
 async def _send(to_email: str, subject: str, html: str) -> None:
-    # Try Gmail SMTP first
+    # Gmail SMTP — tries port 587 (STARTTLS) then 465 (SSL) automatically
     if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASS:
         try:
             await asyncio.to_thread(_send_via_smtp, to_email, subject, html)
-            logger.info("Email sent via SMTP to %s — %s", to_email, subject)
+            logger.info("Email sent via Gmail SMTP to %s — %s", to_email, subject)
             return
         except Exception as exc:
-            # Log and fall through to Resend — don't raise yet.
-            # Cloud providers (Railway) can be blocked by Gmail SMTP;
-            # Resend is the reliable fallback.
-            logger.warning("SMTP failed for %s (%s) — falling back to Resend", to_email, exc)
+            logger.error("Gmail SMTP failed for %s: %s", to_email, exc)
+            raise RuntimeError("Could not send email. Please try again later.") from exc
 
-    # Fallback: Resend API
-    if not settings.RESEND_API_KEY:
-        logger.error("No working email provider — email to %s dropped. Subject: %s", to_email, subject)
-        raise RuntimeError("Could not send email. Please try again later.")
-
-    resend.api_key = settings.RESEND_API_KEY
-    try:
-        await asyncio.to_thread(resend.Emails.send, {
-            "from": settings.RESEND_FROM or "IskoMo <onboarding@resend.dev>",
-            "to": [to_email],
-            "subject": subject,
-            "html": html,
-        })
-        logger.info("Email sent via Resend to %s — %s", to_email, subject)
-    except Exception as exc:
-        logger.error("Resend also failed for %s: %s", to_email, exc)
-        raise RuntimeError("Could not send email. Please try again later.") from exc
+    logger.warning("No email provider configured — email to %s skipped. Subject: %s", to_email, subject)
 
 
 async def send_reset_email(to_email: str, reset_url: str) -> None:
