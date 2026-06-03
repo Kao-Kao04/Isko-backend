@@ -416,7 +416,7 @@ async def broadcast_notification(
 
 # ── Email connectivity test ───────────────────────────────────────────────────
 
-@router.post("/test-email", status_code=200)
+@router.get("/test-email", status_code=200)
 async def test_email():
     """Send a test email from Railway to confirm SMTP works in production."""
     from app.config import settings
