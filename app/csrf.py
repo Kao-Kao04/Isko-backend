@@ -25,6 +25,7 @@ CSRF_EXEMPT = {
     "/api/auth/confirm-email-token", "/health",
     "/api/auth/resend-verification",  # public — no session yet
     "/api/contact",                   # public form — no session to protect
+    "/api/admin/test-email",          # diagnostic endpoint
 }
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
