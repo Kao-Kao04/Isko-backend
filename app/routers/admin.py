@@ -414,6 +414,58 @@ async def broadcast_notification(
     return {"message": f"Notification sent to {len(notifications)} users."}
 
 
+# ── Email connectivity test ───────────────────────────────────────────────────
+
+@router.post("/test-email", status_code=200)
+async def test_email(
+    _: User = Depends(require_super_admin),
+):
+    """Send a test email from Railway to confirm SMTP works in production."""
+    from app.config import settings
+    from app.utils.email import _send
+    import smtplib, asyncio
+
+    results = {}
+
+    # Test port 587 STARTTLS
+    def _test_587():
+        with smtplib.SMTP(settings.SMTP_HOST, 587) as s:
+            s.ehlo(); s.starttls(); s.login(settings.SMTP_USER, settings.SMTP_PASS)
+        return "OK"
+
+    # Test port 465 SSL
+    def _test_465():
+        import ssl as _ssl
+        ctx = _ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=ctx) as s:
+            s.login(settings.SMTP_USER, settings.SMTP_PASS)
+        return "OK"
+
+    try:
+        results["port_587"] = await asyncio.to_thread(_test_587)
+    except Exception as e:
+        results["port_587"] = f"FAILED: {e}"
+
+    try:
+        results["port_465"] = await asyncio.to_thread(_test_465)
+    except Exception as e:
+        results["port_465"] = f"FAILED: {e}"
+
+    # Try sending actual email
+    try:
+        await _send(settings.SMTP_USER, "IskoMo Railway Email Test", "<p>Railway SMTP test successful.</p>")
+        results["send"] = "OK — email sent to SMTP_USER"
+    except Exception as e:
+        results["send"] = f"FAILED: {e}"
+
+    return {
+        "smtp_host": settings.SMTP_HOST,
+        "smtp_user": settings.SMTP_USER,
+        "smtp_port_configured": settings.SMTP_PORT,
+        "results": results,
+    }
+
+
 # ── One-time backfill: resend account-verified emails ────────────────────────
 
 @router.post("/backfill/resend-verification-emails", status_code=200)
