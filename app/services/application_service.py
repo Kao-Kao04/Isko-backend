@@ -71,6 +71,7 @@ async def list_applications(
     status: str | None = None,
     search: str | None = None,
     scholarship_id: int | None = None,
+    sub_status: str | None = None,
 ):
     q = select(Application)
     if user.role == UserRole.student:
@@ -86,6 +87,8 @@ async def list_applications(
             q = q.where(Application.status == ApplicationStatus(status))
         except ValueError:
             pass
+    if sub_status:
+        q = q.where(Application.sub_status == sub_status)
     if search:
         term = f"%{search.strip()}%"
         q = (q
@@ -106,7 +109,7 @@ async def list_applications(
     return result.scalars().all(), total
 
 
-async def count_applications(db: AsyncSession, user: User, status: str | None = None) -> int:
+async def count_applications(db: AsyncSession, user: User, status: str | None = None, sub_status: str | None = None) -> int:
     """Efficient COUNT-only query — use this instead of list_applications for counts."""
     q = select(func.count(Application.id))
     if user.role == UserRole.student:
@@ -120,6 +123,8 @@ async def count_applications(db: AsyncSession, user: User, status: str | None = 
             q = q.where(Application.status == ApplicationStatus(status))
         except ValueError:
             pass
+    if sub_status:
+        q = q.where(Application.sub_status == sub_status)
     result = await db.execute(q)
     return result.scalar()
 

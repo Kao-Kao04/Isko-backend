@@ -26,20 +26,22 @@ async def list_applications(
     status: str | None = Query(None),
     search: str | None = Query(None),
     scholarship_id: int | None = Query(None),
+    sub_status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    items, total = await application_service.list_applications(db, current_user, page, page_size, status, search, scholarship_id)
+    items, total = await application_service.list_applications(db, current_user, page, page_size, status, search, scholarship_id, sub_status)
     return paginate(items, total, page, page_size)
 
 
 @router.get("/count")
 async def count_applications(
     status: str | None = Query(None),
+    sub_status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    total = await application_service.count_applications(db, current_user, status)
+    total = await application_service.count_applications(db, current_user, status, sub_status)
     return {"count": total}
 
 
