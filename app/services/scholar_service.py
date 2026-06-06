@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -6,6 +7,14 @@ from app.models.scholar import Scholar, ScholarStatus, SemesterRecord, ScholarSt
 from app.models.user import User, UserRole
 from app.schemas.scholar import ScholarStatusUpdate, SemesterRecordCreate, SemesterRecordUpdate
 from app.exceptions import NotFoundError, ValidationError, ForbiddenError
+
+
+async def _bg(coro) -> None:
+    """Run an email/notification coroutine in background — never blocks the HTTP response."""
+    try:
+        await coro
+    except Exception:
+        pass
 
 
 def _check_dept_scholar(scholar: Scholar, actor: User) -> None:
@@ -111,11 +120,8 @@ async def update_scholar_status(
     )
     db.add(log)
 
-    # Fetch scholarship name for notification messages
-    from app.models.scholarship import Scholarship as _Sch
-    sch_result = await db.execute(select(_Sch).where(_Sch.id == scholar.scholarship_id))
-    sch = sch_result.scalar_one_or_none()
-    sch_name = sch.name if sch else "your scholarship"
+    # scholarship is already eagerly loaded by get_scholar() — no extra query needed
+    sch_name = scholar.scholarship.name if scholar.scholarship else "your scholarship"
 
     # In-app notification for every status change
     _NOTIF_MAP: dict[str, tuple[str, str]] = {
@@ -150,19 +156,20 @@ async def update_scholar_status(
         except Exception:
             pass  # notification failure must not block the status update
 
-    # Email for termination (already existed)
+    # Email for termination — cache email before commit, send in background
+    _term_email: str | None = None
     if data.status.value == "terminated":
-        from app.utils.email import send_scholar_terminated_email
         from app.models.user import User as UserModel
-        user_result = await db.execute(select(UserModel).where(UserModel.id == scholar.student_id))
-        user = user_result.scalar_one_or_none()
-        if user:
-            try:
-                await send_scholar_terminated_email(user.email, data.reason)
-            except Exception:
-                pass
+        _u = (await db.execute(select(UserModel).where(UserModel.id == scholar.student_id))).scalar_one_or_none()
+        if _u:
+            _term_email = str(_u.email)
 
     await db.commit()
+
+    if _term_email:
+        from app.utils.email import send_scholar_terminated_email
+        asyncio.create_task(_bg(send_scholar_terminated_email(_term_email, data.reason)))
+
     return await get_scholar(db, scholar_id)
 
 
@@ -225,7 +232,7 @@ async def _evaluate_retention(db: AsyncSession, scholar: Scholar, gwa: str | Non
                     from app.utils.email import send_probationary_email
                     _u = (await db.execute(select(User).where(User.id == scholar.student_id))).scalar_one_or_none()
                     if _u:
-                        await send_probationary_email(str(_u.email), _sch_name, reason_str)
+                        asyncio.create_task(_bg(send_probationary_email(str(_u.email), _sch_name, reason_str)))
                 except Exception:
                     pass
     else:
@@ -257,7 +264,7 @@ async def _evaluate_retention(db: AsyncSession, scholar: Scholar, gwa: str | Non
                 from app.utils.email import send_probation_lifted_email
                 _u = (await db.execute(select(User).where(User.id == scholar.student_id))).scalar_one_or_none()
                 if _u:
-                    await send_probation_lifted_email(str(_u.email), _sch_name)
+                    asyncio.create_task(_bg(send_probation_lifted_email(str(_u.email), _sch_name)))
             except Exception:
                 pass
 
@@ -400,7 +407,7 @@ async def release_benefit(db: AsyncSession, scholar_id: int, record_id: int, act
 
         if _u_email:
             from app.utils.email import send_benefit_released_email
-            await send_benefit_released_email(_u_email, _sch_name)
+            asyncio.create_task(_bg(send_benefit_released_email(_u_email, _sch_name)))
     except Exception:
         pass
 

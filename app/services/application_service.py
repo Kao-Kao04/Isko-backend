@@ -331,6 +331,33 @@ async def withdraw_application(db: AsyncSession, application_id: int, student: U
         app.closed_at = datetime.now(timezone.utc)
 
     await append_audit(db, app.id, student.id, "withdrawn", from_status=old_status, to_status=ApplicationStatus.withdrawn)
+
+    # Notify the student
+    sch_result = await db.execute(select(Scholarship).where(Scholarship.id == app.scholarship_id))
+    scholarship = sch_result.scalar_one_or_none()
+    sch_name = scholarship.name if scholarship else "the scholarship"
+    await create_notification(
+        db, student.id, "Application Withdrawn",
+        f"Your application for {sch_name} has been withdrawn.", app.id
+    )
+
+    # Notify OSFA staff in the matching department
+    student_label = student.email
+    if student.student_profile:
+        student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}".strip() or student.email
+    if scholarship and scholarship.category:
+        osfa_staff = (await db.execute(
+            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True, User.department == scholarship.category)
+        )).scalars().all()
+        for s in osfa_staff:
+            await create_notification(
+                db, s.id,
+                "Application Withdrawn",
+                f"{student_label} withdrew their application for {sch_name}.",
+                app.id,
+                link=f"/applicants/{app.id}",
+            )
+
     await db.commit()
 
 
