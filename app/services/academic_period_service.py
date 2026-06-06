@@ -31,6 +31,18 @@ async def list_periods(db: AsyncSession) -> list[AcademicPeriod]:
 async def create_period(db: AsyncSession, data: AcademicPeriodCreate, actor: User) -> AcademicPeriod:
     if actor.role != UserRole.super_admin:
         raise ForbiddenError("Super admin access required")
+
+    existing = (await db.execute(
+        select(AcademicPeriod).where(
+            AcademicPeriod.academic_year == data.academic_year,
+            AcademicPeriod.semester == data.semester,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        sem_map = {"first": "1st Semester", "second": "2nd Semester", "summer": "Summer"}
+        sem_label = sem_map.get(data.semester.value, data.semester.value)
+        raise ValidationError(f"A {sem_label} period for AY {data.academic_year} already exists.")
+
     period = AcademicPeriod(**data.model_dump())
     db.add(period)
     await db.commit()
@@ -77,7 +89,7 @@ async def delete_period(db: AsyncSession, period_id: int, actor: User) -> None:
     if not period:
         raise NotFoundError("AcademicPeriod", period_id)
     if period.gwa_submissions:
-        raise ValidationError("Cannot delete a period that has GWA submissions. Archive it instead.")
+        raise ValidationError("Cannot delete a period that has GWA submissions. Approve or reject all submissions first.")
     await db.delete(period)
     await db.commit()
 
