@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -112,11 +112,21 @@ async def send_message(
         else:
             student_name = app.student.email if app.student else "A student"
 
-        # Only notify OSFA staff in the matching department (public/private)
+        # Notify matching OSFA staff + all super_admins
         dept_filter = app.scholarship.category if app.scholarship and app.scholarship.category else None
-        staff_query = select(User).where(User.role == UserRole.osfa_staff, User.is_active == True)
         if dept_filter:
-            staff_query = staff_query.where(User.department == dept_filter)
+            staff_query = select(User).where(
+                User.is_active == True,
+                or_(
+                    User.role == UserRole.super_admin,
+                    and_(User.role == UserRole.osfa_staff, User.department == dept_filter),
+                )
+            )
+        else:
+            staff_query = select(User).where(
+                User.is_active == True,
+                User.role.in_([UserRole.osfa_staff, UserRole.super_admin]),
+            )
         osfa_staff = (await db.execute(staff_query)).scalars().all()
 
         for staff in osfa_staff:

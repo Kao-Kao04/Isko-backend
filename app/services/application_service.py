@@ -219,13 +219,19 @@ async def submit_application(db: AsyncSession, data: ApplicationCreate, student:
         f"Your application for {scholarship.name} has been submitted.", app.id
     )
 
-    # Notify OSFA staff in matching department
+    # Notify matching OSFA staff + all super_admins
     student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}".strip() if student.student_profile else student.email
     if scholarship.category:
-        osfa_staff = (await db.execute(
-            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True, User.department == scholarship.category)
+        notif_users = (await db.execute(
+            select(User).where(
+                User.is_active == True,
+                or_(
+                    User.role == UserRole.super_admin,
+                    (User.role == UserRole.osfa_staff) & (User.department == scholarship.category),
+                )
+            )
         )).scalars().all()
-        for s in osfa_staff:
+        for s in notif_users:
             await create_notification(
                 db, s.id,
                 "New Application Received",
@@ -279,15 +285,21 @@ async def resubmit_application(db: AsyncSession, application_id: int, student: U
         f"Your application for {sch_name} has been resubmitted.", app.id
     )
 
-    # Notify OSFA — student fixed their documents
+    # Notify matching OSFA staff + all super_admins — student fixed their documents
     student_label = student.email
     if student.student_profile:
         student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}".strip() or student.email
     if scholarship and scholarship.category:
-        osfa_staff = (await db.execute(
-            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True, User.department == scholarship.category)
+        notif_users = (await db.execute(
+            select(User).where(
+                User.is_active == True,
+                or_(
+                    User.role == UserRole.super_admin,
+                    (User.role == UserRole.osfa_staff) & (User.department == scholarship.category),
+                )
+            )
         )).scalars().all()
-        for s in osfa_staff:
+        for s in notif_users:
             await create_notification(
                 db, s.id,
                 "Application Resubmitted",
@@ -341,15 +353,21 @@ async def withdraw_application(db: AsyncSession, application_id: int, student: U
         f"Your application for {sch_name} has been withdrawn.", app.id
     )
 
-    # Notify OSFA staff in the matching department
+    # Notify matching OSFA staff + all super_admins
     student_label = student.email
     if student.student_profile:
         student_label = f"{student.student_profile.first_name} {student.student_profile.last_name}".strip() or student.email
     if scholarship and scholarship.category:
-        osfa_staff = (await db.execute(
-            select(User).where(User.role == UserRole.osfa_staff, User.is_active == True, User.department == scholarship.category)
+        notif_users = (await db.execute(
+            select(User).where(
+                User.is_active == True,
+                or_(
+                    User.role == UserRole.super_admin,
+                    (User.role == UserRole.osfa_staff) & (User.department == scholarship.category),
+                )
+            )
         )).scalars().all()
-        for s in osfa_staff:
+        for s in notif_users:
             await create_notification(
                 db, s.id,
                 "Application Withdrawn",
