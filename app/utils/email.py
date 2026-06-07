@@ -18,7 +18,7 @@ def _send_via_smtp(to_email: str, subject: str, html: str) -> None:
 
     try:
         # Primary: STARTTLS on port 587
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.login(settings.SMTP_USER, settings.SMTP_PASS)
@@ -27,7 +27,7 @@ def _send_via_smtp(to_email: str, subject: str, html: str) -> None:
         # Fallback: SSL on port 465 (some cloud providers block 587 but allow 465)
         import ssl as _ssl
         context = _ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context) as server:
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context, timeout=15) as server:
             server.login(settings.SMTP_USER, settings.SMTP_PASS)
             server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
 

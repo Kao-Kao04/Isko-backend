@@ -28,6 +28,14 @@ class RejectStudentRequest(BaseModel):
 _LOCKED_PROFILE_FIELDS = {"college", "program", "year_level"}
 
 
+async def _send_email_bg(coro, to_email: str, user_id: int) -> None:
+    """Run an account-status email in the background — SMTP latency must never block the HTTP response."""
+    try:
+        await coro
+    except Exception as exc:
+        logger.error("Failed to send account-status email to %s (user %s): %s", to_email, user_id, exc)
+
+
 @router.patch("/me/profile", response_model=UserResponse)
 async def patch_my_profile(
     data: PatchProfileRequest,
@@ -186,11 +194,8 @@ async def approve_student(
     except Exception:
         pass
 
-    try:
-        from app.utils.email import send_account_verified_email
-        await send_account_verified_email(_email)
-    except Exception as exc:
-        logger.error("Failed to send account-verified email to %s (user %s): %s", _email, user_id, exc)
+    from app.utils.email import send_account_verified_email
+    asyncio.create_task(_send_email_bg(send_account_verified_email(_email), _email, user_id))
 
     return await _get_student_or_404(db, user_id)
 
@@ -223,11 +228,8 @@ async def reject_student(
     except Exception:
         pass
 
-    try:
-        from app.utils.email import send_account_rejected_email
-        await send_account_rejected_email(_email, data.remarks)
-    except Exception as exc:
-        logger.error("Failed to send account-rejected email to %s (user %s): %s", _email, user_id, exc)
+    from app.utils.email import send_account_rejected_email
+    asyncio.create_task(_send_email_bg(send_account_rejected_email(_email, data.remarks), _email, user_id))
 
     return await _get_student_or_404(db, user_id)
 
