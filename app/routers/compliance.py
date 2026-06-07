@@ -256,3 +256,107 @@ async def get_scholar_terms(
         requires_thank_you_letter=sch.requires_thank_you_letter if sch else False,
     )
     return HTMLResponse(content=html)
+
+
+async def _load_app_for_document(application_id: int, current_user: User, db: AsyncSession):
+    from app.models.application import Application
+    from app.models.user import User as UserModel
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(Application)
+        .options(
+            selectinload(Application.scholarship),
+            selectinload(Application.student).selectinload(UserModel.student_profile),
+        )
+        .where(Application.id == application_id)
+    )
+    app = result.scalar_one_or_none()
+    if not app:
+        raise NotFoundError("Application", application_id)
+    if current_user.role == UserRole.student and app.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Not your application"})
+    return app
+
+
+@router.get("/applications/{application_id}/documents/scholarship-agreement", response_class=HTMLResponse)
+async def get_scholarship_agreement(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.utils.document_generator import generate_scholarship_agreement
+
+    app = await _load_app_for_document(application_id, current_user, db)
+    profile = app.student.student_profile if app.student else None
+    sch = app.scholarship
+
+    html = generate_scholarship_agreement(
+        scholar_name=f"{profile.first_name} {profile.last_name}" if profile else "Scholar",
+        student_number=profile.student_number if profile else "N/A",
+        scholarship_name=sch.name if sch else "Scholarship",
+        period=sch.period if sch else None,
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/applications/{application_id}/documents/acceptance-form", response_class=HTMLResponse)
+async def get_acceptance_form(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.utils.document_generator import generate_acceptance_form
+
+    app = await _load_app_for_document(application_id, current_user, db)
+    profile = app.student.student_profile if app.student else None
+    sch = app.scholarship
+
+    html = generate_acceptance_form(
+        scholar_name=f"{profile.first_name} {profile.last_name}" if profile else "Scholar",
+        student_number=profile.student_number if profile else "N/A",
+        scholarship_name=sch.name if sch else "Scholarship",
+        period=sch.period if sch else None,
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/applications/{application_id}/documents/bank-details-form", response_class=HTMLResponse)
+async def get_bank_details_form(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.utils.document_generator import generate_bank_details_form
+
+    app = await _load_app_for_document(application_id, current_user, db)
+    profile = app.student.student_profile if app.student else None
+    sch = app.scholarship
+
+    html = generate_bank_details_form(
+        scholar_name=f"{profile.first_name} {profile.last_name}" if profile else "Scholar",
+        student_number=profile.student_number if profile else "N/A",
+        scholarship_name=sch.name if sch else "Scholarship",
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/applications/{application_id}/documents/maintaining-conditions-form", response_class=HTMLResponse)
+async def get_maintaining_conditions_form(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.utils.document_generator import generate_maintaining_conditions_form
+
+    app = await _load_app_for_document(application_id, current_user, db)
+    profile = app.student.student_profile if app.student else None
+    sch = app.scholarship
+
+    html = generate_maintaining_conditions_form(
+        scholar_name=f"{profile.first_name} {profile.last_name}" if profile else "Scholar",
+        student_number=profile.student_number if profile else "N/A",
+        scholarship_name=sch.name if sch else "Scholarship",
+        min_gwa=sch.min_gwa if sch else None,
+    )
+    return HTMLResponse(content=html)
