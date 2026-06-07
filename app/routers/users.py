@@ -259,6 +259,31 @@ async def send_registration_reminders(
     return {"sent": sent, "failed": failed, "total": len(users)}
 
 
+@router.post("/send-verified-reminders", status_code=200)
+async def send_verified_reminders(
+    _: User = Depends(require_osfa_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User).where(
+            User.role == UserRole.student,
+            User.account_status == AccountStatus.verified,
+        )
+    )
+    users = result.scalars().all()
+
+    from app.utils.email import send_verified_browse_reminder_email
+    sent, failed = 0, 0
+    for u in users:
+        try:
+            await send_verified_browse_reminder_email(str(u.email))
+            sent += 1
+        except Exception:
+            failed += 1
+
+    return {"sent": sent, "failed": failed, "total": len(users)}
+
+
 # ─── GWA Request endpoints ────────────────────────────────────────────────────
 
 class GwaRejectRequest(BaseModel):

@@ -222,6 +222,25 @@ async def send_account_verified_email(to_email: str) -> None:
     )
 
 
+async def send_verified_browse_reminder_email(to_email: str) -> None:
+    await _send(
+        to_email=to_email,
+        subject="You're Verified — Explore Scholarships on IskoMo",
+        html=f"""
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #800000;">You're Verified!</h2>
+            <p>Just a reminder — your IskoMo account is verified and ready to go. You can now browse and apply for available scholarships at PUP.</p>
+            <a href="{settings.FRONTEND_URL}/student/iskolarships" style="display: inline-block; padding: 12px 28px;
+               background: #800000; color: white; text-decoration: none; border-radius: 8px;
+               font-weight: bold; margin: 16px 0;">
+                Browse Scholarships
+            </a>
+            {_OSFA_FOOTER}
+        </div>
+        """,
+    )
+
+
 async def send_account_rejected_email(to_email: str, remarks: str | None = None) -> None:
     remarks_block = (
         f'<p style="margin-top:12px;"><strong>Reason:</strong> {remarks}</p>'
