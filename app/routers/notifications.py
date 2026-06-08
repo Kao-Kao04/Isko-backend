@@ -75,6 +75,19 @@ class AnnounceRequest(BaseModel):
             raise ValueError("image_url must be a secure https:// URL")
         return v
 
+    @field_validator("link")
+    @classmethod
+    def must_not_target_osfa(cls, v: str | None) -> str | None:
+        # Announcements only ever go to students — a link pointing into the OSFA
+        # portal (e.g. pasted from the staffer's own browser tab) would send
+        # students to a page meant for staff.
+        if v is not None:
+            from urllib.parse import urlparse
+            path = urlparse(v).path or v
+            if path.startswith("/osfa") or path.startswith("/admin"):
+                raise ValueError("link must not point to an OSFA/admin page — students cannot be sent there")
+        return v
+
 
 @router.post("/announce", status_code=200)
 async def announce(
