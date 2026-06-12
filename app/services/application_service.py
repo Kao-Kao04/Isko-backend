@@ -655,7 +655,58 @@ async def review_appeal(
 async def get_audit_trail(db: AsyncSession, application_id: int, user: User):
     from app.models.audit import AuditEntry
     await get_application(db, application_id, user)  # permission check
+
     result = await db.execute(
         select(AuditEntry).where(AuditEntry.application_id == application_id).order_by(AuditEntry.created_at)
     )
-    return result.scalars().all()
+    entries: list[dict] = [
+        {
+            "id": e.id,
+            "actor_id": e.actor_id,
+            "action": e.action,
+            "from_status": e.from_status,
+            "to_status": e.to_status,
+            "note": e.note,
+            "created_at": e.created_at,
+            "to_main": None,
+        }
+        for e in result.scalars().all()
+    ]
+
+    # Merge in workflow stage transitions (screening, verification, interview,
+    # decision, completion) so the Activity History tab reflects the full
+    # application -> completion progression, not just the legacy audit events.
+    wf_result = await db.execute(
+        select(WorkflowLog).where(WorkflowLog.application_id == application_id).order_by(WorkflowLog.created_at)
+    )
+    audit_actions = {e["action"] for e in entries}
+    for log in wf_result.scalars().all():
+        # Skip transitions already represented by an AuditEntry above (submitted,
+        # resubmitted, withdrawn) to avoid showing the same event twice. Only skip
+        # if that audit entry actually exists — some older records have a workflow
+        # transition without a matching audit entry, and should still be shown.
+        if log.from_main is None and "submitted" in audit_actions:
+            continue
+        if (log.to_main == MainStatus.WITHDRAWN and log.to_sub == SubStatus.WITHDRAWN
+                and "withdrawn" in audit_actions):
+            continue
+        if (log.from_sub == SubStatus.REVISION_REQUESTED
+                and log.to_main == MainStatus.VERIFICATION
+                and log.to_sub == SubStatus.PENDING_VALIDATION
+                and "resubmitted" in audit_actions):
+            continue
+        entries.append({
+            "id": 1_000_000_000 + log.id,
+            "actor_id": log.changed_by,
+            "action": log.to_sub.value,
+            "from_status": None,
+            "to_status": None,
+            "note": log.note,
+            "created_at": log.created_at,
+            "to_main": log.to_main.value,
+        })
+
+    # Sort by time, then id as a tiebreak — some workflow transitions (e.g. a decision
+    # and the resulting completion-stage entry) share the same timestamp.
+    entries.sort(key=lambda e: (e["created_at"], e["id"]))
+    return entries

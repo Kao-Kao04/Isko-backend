@@ -47,6 +47,9 @@ class AuditEntryResponse(BaseModel):
     to_status: str | None
     note: str | None
     created_at: datetime
+    # Set only for entries derived from a workflow stage transition (WorkflowLog),
+    # so the frontend can label them using workflow stage/sub-status terminology.
+    to_main: str | None = None
 
     model_config = {"from_attributes": True}
 
