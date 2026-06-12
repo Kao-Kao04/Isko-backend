@@ -19,7 +19,7 @@ from app.models.scholar import Scholar, ScholarStatus, ScholarStatusLog
 from app.models.scholarship import ComplianceDocumentType, Scholarship, ScholarshipStatus
 from app.models.workflow import MainStatus, SubStatus, ALLOWED_TRANSITIONS, can_transition, is_terminal
 from app.models.user import User, UserRole
-from app.exceptions import ValidationError, NotFoundError, ForbiddenError
+from app.exceptions import ValidationError, NotFoundError, ForbiddenError, ConflictError
 
 
 def _now() -> datetime:
@@ -516,6 +516,29 @@ async def release_decision(
     }
     if decision not in decision_map:
         raise ValidationError(f"Invalid decision '{decision}'. Must be: approved, rejected, waitlisted")
+
+    # A student may hold only one active scholarship at a time. Submission-time
+    # checks allow one active application per category (public/private), so the
+    # same student can independently reach the decision stage on both — block
+    # the second approval here rather than letting them become a scholar twice.
+    if decision == "approved":
+        other = await db.execute(
+            select(Scholar, Scholarship.name)
+            .join(Scholarship, Scholar.scholarship_id == Scholarship.id)
+            .where(
+                Scholar.student_id == app.student_id,
+                Scholar.scholarship_id != app.scholarship_id,
+                Scholar.status.notin_([ScholarStatus.terminated, ScholarStatus.graduated]),
+            )
+        )
+        row = other.first()
+        if row:
+            _, other_name = row
+            raise ConflictError(
+                f"This student is already an active scholar of '{other_name}'. "
+                "A student may hold only one active scholarship at a time — "
+                "reject or withdraw the other application before approving this one."
+            )
 
     to_sub = decision_map[decision]
     await _apply(db, app, actor, MainStatus.DECISION, to_sub, remarks)
