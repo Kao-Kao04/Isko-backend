@@ -24,7 +24,7 @@ class SignUpRequest(BaseModel):
             raise ValueError("Password must be at least 8 characters")
         if not any(c.isupper() for c in v):
             raise ValueError("Password must contain at least one uppercase letter")
-        if not any(not c.isalnum() for c in v):
+        if not any(not c.isalnum() and not c.isspace() for c in v):
             raise ValueError("Password must contain at least one special character")
         return v
 
